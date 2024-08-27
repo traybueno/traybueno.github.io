@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Land a Shadow Role</title>
+    <!-- Add Montserrat font import -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, #5a88d8 0%, #442d7b 50%, #d16cb8 100%);
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .menu-bar {
+            text-align: center;
+            padding: 25px 0;
+        }
+        .menu-bar ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            display: inline-flex;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+            overflow: hidden;
+        }
+        .menu-bar li {
+            margin: 0;
+        }
+        .menu-bar a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+            padding: 12px 24px;
+            display: block;
+            transition: background-color 0.3s ease;
+        }
+        .menu-bar a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 2rem;
+            margin: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        p {
+            color: #eee;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 2rem;
+        }
+        input[type="email"], input[type="text"], input[type="url"], textarea {
+            width: 300px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: none;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 25px;
+            font-family: 'Montserrat', sans-serif;
+        }
+        textarea {
+            height: 100px;
+            resize: none;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #fff;
+            color: #442d7b;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+            font-family: 'Montserrat', sans-serif;
+        }
+        .toggle-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 200px;
+            height: 34px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 17px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .toggle-switch:before {
+            content: "";
+            position: absolute;
+            width: 100px;
+            height: 30px;
+            left: 2px;
+            top: 2px;
+            background-color: #fff;
+            border-radius: 15px;
+            transition: 0.3s;
+        }
+        .toggle-switch.right:before {
+            transform: translateX(96px);
+        }
+        .toggle-label {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .toggle-label.left {
+            left: 15px;
+            color: #442d7b;
+        }
+        .toggle-label.right {
+            right: 15px;
+            color: #fff;
+        }
+        .toggle-switch.right .toggle-label.left {
+            color: #fff;
+        }
+        .toggle-switch.right .toggle-label.right {
+            color: #442d7b;
+        }
+        .form-container-wrapper {
+            position: relative;
+            min-height: 300px;
+        }
+        .form-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
+        }
+        .form-container.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .file-input-wrapper .btn-file-input {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            width: 300px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+            font-family: 'Montserrat', sans-serif;
+        }
+        .file-input-wrapper:hover .btn-file-input {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* New styles for fade-in animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fade-in {
+            opacity: 0;
+            animation: fadeIn 1s ease-in forwards;
+        }
+
+        .delay-1 { animation-delay: 0.5s; }
+        .delay-2 { animation-delay: 1s; }
+        .delay-3 { animation-delay: 1.5s; }
+
+        #candidateForm, #employerForm {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <nav class="menu-bar fade-in">
+        <ul>
+            <li><a href="#how-it-works">How it Works</a></li>
+            <li><a href="#for-investors">For Investors</a></li>
+        </ul>
+    </nav>
+    <div class="container">
+        <div id="mainContent" class="active">
+            <h1 class="fade-in">Land a Shadow Role</h1>
+            <p class="fade-in delay-1">We are currently invite only. If you think you should be considered for an invite, apply below and we may reach out to you to interview for the platform.</p>
+            <div class="toggle-container fade-in delay-2">
+                <div class="toggle-switch" id="toggleSwitch">
+                    <span class="toggle-label left">Candidate</span>
+                    <span class="toggle-label right">Employer</span>
+                </div>
+            </div>
+            <div class="form-container-wrapper fade-in delay-3">
+                <div class="form-container" id="candidateForm">
+                    <div class="input-group">
+                        <input type="email" placeholder="Your Email Address" required>
+                        <input type="text" placeholder="Your Name" required>
+                        <input type="url" placeholder="LinkedIn Profile URL" required>
+                        <div class="file-input-wrapper">
+                            <button class="btn-file-input">Choose Resume</button>
+                            <input type="file" accept=".pdf,.doc,.docx" required>
+                        </div>
+                        <button type="submit">Join Candidate Waitlist!</button>
+                    </div>
+                </div>
+                <div class="form-container" id="employerForm">
+                    <div class="input-group">
+                        <input type="email" placeholder="Your Email Address" required>
+                        <input type="text" placeholder="Your Name" required>
+                        <input type="text" placeholder="Company Name" required>
+                        <input type="url" placeholder="Company Website" required>
+                        <textarea placeholder="Description of roles you are looking for" required></textarea>
+                        <button type="submit">Join Employer Waitlist!</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const toggleSwitch = document.getElementById('toggleSwitch');
+        const candidateForm = document.getElementById('candidateForm');
+        const employerForm = document.getElementById('employerForm');
+
+        function showInitialForm() {
+            setTimeout(() => {
+                candidateForm.style.display = 'block';
+                candidateForm.classList.add('active');
+            }, 2000);
+        }
+
+        toggleSwitch.addEventListener('click', () => {
+            toggleSwitch.classList.toggle('right');
+            candidateForm.classList.toggle('active');
+            employerForm.classList.toggle('active');
+
+            if (toggleSwitch.classList.contains('right')) {
+                candidateForm.style.display = 'none';
+                employerForm.style.display = 'block';
+            } else {
+                candidateForm.style.display = 'block';
+                employerForm.style.display = 'none';
+            }
+        });
+
+        document.querySelector('.file-input-wrapper input[type=file]').addEventListener('change', function() {
+            if (this.files && this.files.length > 0) {
+                document.querySelector('.btn-file-input').textContent = this.files[0].name;
+            }
+        });
+
+        showInitialForm();
+    </script>
+</body>
+</html>
