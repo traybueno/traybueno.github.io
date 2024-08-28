@@ -53,7 +53,10 @@
             flex-grow: 1;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start;
+            padding-top: 2rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 100px);
         }
         h1 {
             font-size: 3rem;
@@ -87,7 +90,7 @@
         button {
             padding: 12px 24px;
             background-color: #fff;
-            color: #442d7b;
+            color: #000;
             border: none;
             border-radius: 25px;
             cursor: pointer;
@@ -133,7 +136,7 @@
         }
         .toggle-label.left {
             left: 15px;
-            color: #442d7b;
+            color: #000;
         }
         .toggle-label.right {
             right: 15px;
@@ -143,16 +146,15 @@
             color: #fff;
         }
         .toggle-switch.right .toggle-label.right {
-            color: #442d7b;
+            color: #000;
         }
         .form-container-wrapper {
             position: relative;
-            min-height: 300px;
+            overflow-y: visible;
+            margin-top: 2rem;
         }
         .form-container {
-            position: absolute;
-            top: 0;
-            left: 0;
+            position: relative;
             width: 100%;
             opacity: 0;
             visibility: hidden;
@@ -213,19 +215,63 @@
         #candidateForm, #employerForm {
             display: none;
         }
+
+        /* New style for content sections */
+        .content {
+            display: none;
+        }
+
+        .content.active {
+            display: block;
+        }
+
+        .content h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .content h2 {
+            font-size: 2rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .content p {
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .content .large-title {
+            font-size: 2.8rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+        }
+
+        .content .small-title {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-top: 2.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* New style for active menu item */
+        .menu-bar a.active {
+            background-color: #fff;
+            color: #000;
+        }
     </style>
 </head>
 <body>
     <nav class="menu-bar fade-in">
         <ul>
-            <li><a href="#how-it-works">How it Works</a></li>
-            <li><a href="#for-investors">For Investors</a></li>
+            <li><a href="#" id="applyLink">Apply</a></li>
+            <li><a href="#" id="aboutLink">About</a></li>
         </ul>
     </nav>
     <div class="container">
-        <div id="mainContent" class="active">
+        <div id="mainContent" class="content active">
             <h1 class="fade-in">Land a Shadow Role</h1>
-            <p class="fade-in delay-1">We are currently invite only. If you think you should be considered for an invite, apply below and we may reach out to you to interview for the platform.</p>
+            <p class="fade-in delay-1">We are currently invite only. If you think you should be considered for an invite, apply below and we may reach out to interview.</p>
             <div class="toggle-container fade-in delay-2">
                 <div class="toggle-switch" id="toggleSwitch">
                     <span class="toggle-label left">Candidate</span>
@@ -238,8 +284,8 @@
                         <input type="email" placeholder="Your Email Address" required>
                         <input type="text" placeholder="Your Name" required>
                         <input type="url" placeholder="LinkedIn Profile URL" required>
+                        <textarea placeholder="What is something that makes you stand out as a candidate?" required></textarea>
                         <div class="file-input-wrapper">
-                            <button class="btn-file-input">Choose Resume</button>
                             <input type="file" accept=".pdf,.doc,.docx" required>
                         </div>
                         <button type="submit">Join Candidate Waitlist!</button>
@@ -250,12 +296,32 @@
                         <input type="email" placeholder="Your Email Address" required>
                         <input type="text" placeholder="Your Name" required>
                         <input type="text" placeholder="Company Name" required>
-                        <input type="url" placeholder="Company Website" required>
-                        <textarea placeholder="Description of roles you are looking for" required></textarea>
+                        <input type="url" placeholder="Company Website" >
+                        <textarea placeholder="Describe the roles you are looking to fill" required></textarea>
                         <button type="submit">Join Employer Waitlist!</button>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div id="aboutContent" class="content">
+            <h1 class="large-title fade-in">Private access to part-time technical opportunities</h1>
+            <p class="fade-in delay-1">
+                Highly skilled employees are often restricted from seeking additional work due to time commitment issues or concerns with their full time role's contractual obligations. 
+            </p>
+            <p class="fade-in delay-1">
+                Companies also struggle to access top-tier talent for work that a full time role is not needed for. They face the challenge of finding candidates willing to accept part time work and side gig platforms saturated with fake, low quality, or AI profiles.
+            </p>
+            <h2 class="small-title fade-in delay-2">The Shadow Roles Promise</h2>
+            <p class="fade-in delay-3">
+                We offer an exclusive hiring platform that ensures top tier candidates can take on additional work with flexible part-time engagements.
+            </p>
+            <p class="fade-in delay-3">
+                The platform will vet potential contracts and match employees with part time roles that work for them.
+            </p>
+            <p class="fade-in delay-3">
+                The platform also thoroughly vets all candidates, requiring an invite to join the platform and an additional screening process to ensure they are top talent.
+            </p>
         </div>
     </div>
 
@@ -292,6 +358,47 @@
         });
 
         showInitialForm();
+
+        // JavaScript for handling navigation
+        document.getElementById('aboutLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            showContent('aboutContent');
+        });
+
+        // Event listener for the Apply button
+        document.getElementById('applyLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            showContent('mainContent');
+            document.getElementById('toggleSwitch').scrollIntoView({ behavior: 'smooth' });
+        });
+
+        function showContent(contentId) {
+            // Hide all content sections
+            document.querySelectorAll('.content').forEach(function(content) {
+                content.classList.remove('active');
+            });
+
+            // Show the selected content
+            document.getElementById(contentId).classList.add('active');
+
+            // Remove active class from all nav links
+            document.querySelectorAll('.menu-bar a').forEach(function(link) {
+                link.classList.remove('active');
+            });
+
+            // Add active class to the correct nav link
+            switch(contentId) {
+                case 'aboutContent':
+                    document.getElementById('aboutLink').classList.add('active');
+                    break;
+                case 'mainContent':
+                    document.getElementById('applyLink').classList.add('active');
+                    break;
+            }
+        }
+
+        // Set initial active state
+        showContent('mainContent');
     </script>
 </body>
 </html>
