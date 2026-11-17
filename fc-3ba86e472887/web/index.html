@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Field + Chain</title>
+<style>
+  @font-face { font-family: 'Roboto Slab'; font-weight: 500; font-display: block; src: url('./node_modules/@fontsource/roboto-slab/files/roboto-slab-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Roboto Slab'; font-weight: 700; font-display: block; src: url('./node_modules/@fontsource/roboto-slab/files/roboto-slab-latin-700-normal.woff2') format('woff2'); }
+  :root { --cream: #ece2bd; --white: #fff; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: var(--cream); font-family: Georgia, "Times New Roman", serif; -webkit-user-select: none; user-select: none; }
+  #table { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+  /* The buttons: a stepped double frame like the board's, a diamond either side of the label, and a glint that sweeps across the frame on hover. */
+  .bar { position: fixed; right: max(22px, env(safe-area-inset-right)); top: max(16px, env(safe-area-inset-top)); display: flex; flex-direction: column; gap: 10px; align-items: stretch; z-index: 2; }
+  .btn { --step: polygon(12px 0, calc(100% - 12px) 0, calc(100% - 12px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 8px, 100% 8px, 100% calc(100% - 8px), calc(100% - 6px) calc(100% - 8px), calc(100% - 6px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 8px), 0 calc(100% - 8px), 0 8px, 6px 8px, 6px 4px, 12px 4px);
+         position: relative; isolation: isolate; border: 0; min-height: 42px; padding: 11px 20px; display: inline-flex; align-items: center; justify-content: center; gap: 11px; cursor: pointer;
+         color: var(--cream); font: 700 13px Georgia, "Times New Roman", serif; letter-spacing: .17em; text-transform: uppercase; text-shadow: 0 1px 0 #000;
+         background: linear-gradient(rgba(70, 235, 130, var(--g)), rgba(70, 235, 130, var(--g))) 0 0 / 100% 100%, linear-gradient(105deg, #cbbf93 0%, #ece2bd 38%, #fff8dc 50%, #ece2bd 62%, #cbbf93 100%) 100% 0 / 260% 100%;
+         clip-path: var(--step); transition: background-position .55s ease, color .15s, transform .1s; }
+  .btn::before { content: ""; position: absolute; inset: 3px; z-index: -1; background: #060508; clip-path: var(--step); transition: background .15s; }
+  .btn::after  { content: ""; position: absolute; inset: 6px; z-index: -1; border: 1px solid color-mix(in srgb, #7dffa8 calc(var(--g) * 100%), rgba(236,226,189,.5)); clip-path: var(--step); pointer-events: none; }
+  .btn .g { font-size: 8px; color: #d9a441; transition: transform .3s, color .15s; }
+  .btn[hidden] { display: none; }
+  .btn:hover, .btn:focus-visible { background-position: 0 0, 0 0; color: #fff; outline: none; }
+  .btn:hover::before, .btn:focus-visible::before { background: #17120a; }
+  .btn:hover .g, .btn:focus-visible .g { color: #ffe08a; transform: rotate(90deg) scale(1.35); }
+  .btn:active { transform: translateY(1px); }
+  .btn.end { font-size: 14px; padding: 12px 26px; }
+
+  /* The action buttons only show while they are valid, and blink green to say so. */
+  @property --g { syntax: '<number>'; inherits: false; initial-value: 0; }
+  .bar .btn { --g: 0; min-width: 158px; color: color-mix(in srgb, #8dffb0 calc(var(--g) * 100%), var(--cream)); animation: valid 1.5s ease-in-out infinite; }
+  .bar .btn:hover, .bar .btn:focus-visible { color: #fff; }
+  @keyframes valid { 0%, 100% { --g: 0; } 50% { --g: .8; } }
+  @media (prefers-reduced-motion: reduce) { .bar .btn { animation: none; --g: .35; } }
+  .btn .sub { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; letter-spacing: .08em; text-transform: none; opacity: .7; }
+  .btn .t { text-align: center; }
+
+  /* Before a game: the title and the opponents. */
+  .start { position: fixed; inset: 0; z-index: 6; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+  .start[hidden] { display: none; }
+  .title { display: flex; align-items: center; gap: 22px; }
+  .title .name { font-size: clamp(28px, 5vw, 52px); letter-spacing: .26em; text-transform: uppercase; white-space: nowrap; }
+  .title .rule { width: clamp(30px, 8vw, 120px); height: 7px; border-top: 1px solid var(--cream); border-bottom: 1px solid var(--cream); }
+  .start .k { margin-bottom: 6px; }
+  .list { display: flex; flex-direction: column; gap: 14px; align-items: stretch; width: min(320px, 80vw); }
+  .list .btn { padding: 14px 24px; }
+  .list .btn.last { filter: drop-shadow(0 0 7px rgba(255, 224, 138, .45)); }
+  .list .btn.sel { color: #fff; filter: drop-shadow(0 0 4px #ffe08a) drop-shadow(0 0 12px rgba(255, 224, 138, .8)); }
+  .list .btn.sel .g { color: #ffe08a; }
+  .pick { font-size: 18px; letter-spacing: .12em; text-transform: uppercase; color: #ffe08a; min-height: 1.4em; }
+  .btn.sm { font-size: 12px; padding: 8px 14px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .tabbtn { position: fixed; left: max(18px, env(safe-area-inset-left)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 26px); z-index: 2; background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cream); opacity: .6; cursor: pointer; }
+  .tabbtn:hover { opacity: 1; }
+  .tabbtn[hidden] { display: none; }
+  .hist { position: fixed; inset: 0; z-index: 8; background: rgba(0,0,0,.94); display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 28px 16px; overflow: auto; box-sizing: border-box; }
+  .hist[hidden] { display: none; }
+  .hist .items { width: min(720px, 100%); display: flex; flex-direction: column; gap: 10px; }
+  .hist .item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border: 1px solid rgba(236, 226, 189, .35); padding: 10px 14px; font-size: 14px; letter-spacing: .06em; }
+  .hist .item .sub { opacity: .65; font-size: 12px; }
+
+  /* The big look at the card under the pointer: it simply appears, at the left, with a thin frame. */
+  .preview { position: fixed; left: 30px; top: 50%; transform: translateY(-46%); height: min(56vh, 520px); aspect-ratio: 2 / 3; box-sizing: border-box; padding: 6px; background: #000;
+             border: 1px solid rgba(236, 226, 189, .85); outline: 1px solid rgba(236, 226, 189, .35); outline-offset: 5px; pointer-events: none; z-index: 3; visibility: hidden; }
+  .preview.on { visibility: visible; }
+  .pimg { width: 100%; height: 100%; }
+  .pimg img { width: 100%; height: 100%; display: block; }
+  @media (max-width: 760px) { .preview { display: none; } }
+
+  .marks { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; }
+
+  .anim { position: fixed; left: max(18px, env(safe-area-inset-left)); top: 96px; bottom: 56px; width: 214px; z-index: 3; overflow-y: auto; scrollbar-width: thin; }
+  .anim .ttl { font-size: 15px; letter-spacing: .24em; text-transform: uppercase; margin-bottom: 4px; text-shadow: 0 0 6px #000; }
+  .anim .grp { margin: 16px 0 4px; font-size: 11px; letter-spacing: .26em; text-transform: uppercase; opacity: .6; text-shadow: 0 0 6px #000; }
+  .anim button { display: block; width: 100%; box-sizing: border-box; margin-bottom: 2px; text-align: left; background: rgba(0,0,0,.6); border: 0; border-left: 2px solid transparent; padding: 7px 10px; font: inherit; font-size: 13px; letter-spacing: .05em; color: var(--cream); cursor: pointer; }
+  .anim button:hover { background: rgba(236,226,189,.14); color: #fff; }
+  .anim button.on { border-left-color: #ffe08a; color: #fff; background: rgba(236,226,189,.18); }
+  .anim button.back { margin-top: 18px; opacity: .6; }
+  .speed { position: fixed; left: max(18px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 2; background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cream); opacity: .4; cursor: pointer; }
+  .speed:hover { opacity: .9; }
+  .hint { position: fixed; top: max(16px, env(safe-area-inset-top)); left: max(22px, env(safe-area-inset-left)); z-index: 3; max-width: min(32vw, 400px); text-align: left; line-height: 1.35; font-size: 15px; letter-spacing: .04em; opacity: 0; transition: opacity .25s; pointer-events: none; text-shadow: 0 0 6px #000; }
+
+  .cover, .over { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+  .cover { background: #000; z-index: 5; cursor: pointer; }
+  .over { z-index: 4; background: rgba(0,0,0,.55); cursor: pointer; }
+  .cover[hidden], .over[hidden] { display: none; }
+  .k { font-size: 15px; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
+  .who { font-size: 44px; letter-spacing: .08em; }
+  .tap { font-size: 14px; letter-spacing: .2em; text-transform: uppercase; opacity: .6; margin-top: 18px; animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .25; } }
+</style>
+<script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="table"></canvas>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
