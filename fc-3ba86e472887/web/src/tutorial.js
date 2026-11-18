@@ -15,7 +15,7 @@
  * A board names cards per seat: `field`, `hand`, `chain`, `discard`, `draws` (in the order they will be drawn), `spentHeart`. A field entry is `key`,
  * `key:spent`, `key>heart` (a Guardian on its Heart) or `key>N` (a Guardian on the Nth card of that field, from 1), and `:spent` may follow either.
  */
-import { newGame, legalMoves, locate } from '../../src/index.js?v=4690f3a';
+import { newGame, legalMoves, locate } from '../../src/index.js?v=c5cc373';
 
 /** Card ids keep the engine's form `<seat>-<key>-<n>` (match.js `keyOf` reads the key from it). */
 let made = 0;
@@ -120,7 +120,7 @@ export const STORY = {
 
     chapter('The plan'),
     tell('The opponent deployed another Knight.'),
-    tell('When you release your Chain, it plays from left to right. The order is your plan.'),
+    tell('When you release your Chain, it plays from slot I down to slot III. The order is your plan.'),
     step('Drag Shadow Step into your Chain, after Shift.', is('wind')),
     end('Next turn, you strike. Press End Turn.'),
     wait('The opponent’s turn. Watch their new Knight.'),

@@ -7,18 +7,18 @@
  * while you watch from seat 0 (`?seat=1` flips the view); `?learn` opens Learn to play (tutorial.js); `?vs=anim` is the animation board (made-up positions and a menu of effects to replay, see animboard.js); the Bot vs Bot game's compact log is `fcLog()` in the console. Dev aids: ?bot=squire|knight|warlock skips the start screen, ?seed=N picks the deal, ?plies=K plays K random
  * legal moves first (a mid-game position to try things on), ?seat=0|1 fixes who is looking, key N deals a new game.
  */
-import { newGame, legalMoves, apply, viewFor, CARDS } from '../../src/index.js?v=4690f3a';
-import { loadArt } from './assets.js?v=4690f3a';
-import { Scene } from './scene.js?v=4690f3a';
-import { Input } from './input.js?v=4690f3a';
-import { createSound } from './sound.js?v=4690f3a';
-import { createMusic } from './music.js?v=4690f3a';
-import { createUI } from './ui.js?v=4690f3a';
-import { makeBot, PROFILES } from './bot.js?v=4690f3a';
-import { MatchLog } from './match.js?v=4690f3a';
-import { SCENARIOS, build, stepMove } from './animboard.js?v=4690f3a';
-import { STORY, Tutor, buildLesson } from './tutorial.js?v=4690f3a';
-import { createGuide } from './guide.js?v=4690f3a';
+import { newGame, legalMoves, apply, viewFor, CARDS } from '../../src/index.js?v=c5cc373';
+import { loadArt } from './assets.js?v=c5cc373';
+import { Scene } from './scene.js?v=c5cc373';
+import { Input } from './input.js?v=c5cc373';
+import { createSound } from './sound.js?v=c5cc373';
+import { createMusic } from './music.js?v=c5cc373';
+import { createUI } from './ui.js?v=c5cc373';
+import { makeBot, PROFILES } from './bot.js?v=c5cc373';
+import { MatchLog } from './match.js?v=c5cc373';
+import { SCENARIOS, build, stepMove } from './animboard.js?v=c5cc373';
+import { STORY, Tutor, buildLesson } from './tutorial.js?v=c5cc373';
+import { createGuide } from './guide.js?v=c5cc373';
 
 const params = new URLSearchParams(location.search);
 const hotseat = params.get('vs') === 'hotseat', watch = params.get('vs') === 'bots', anim = params.get('vs') === 'anim';

@@ -3,12 +3,12 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=4690f3a';
-import { Table } from './table.js?v=4690f3a';
-import { Overlay } from './overlay.js?v=4690f3a';
-import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=4690f3a';
-import { Fx } from './fx.js?v=4690f3a';
-import { protector, inForce } from '../../src/index.js?v=4690f3a';
+import { Card, SPRING } from './card.js?v=c5cc373';
+import { Table } from './table.js?v=c5cc373';
+import { Overlay } from './overlay.js?v=c5cc373';
+import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=c5cc373';
+import { Fx } from './fx.js?v=c5cc373';
+import { protector, inForce } from '../../src/index.js?v=c5cc373';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 

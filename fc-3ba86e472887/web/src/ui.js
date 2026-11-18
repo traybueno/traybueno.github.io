@@ -5,8 +5,8 @@
  * the result shown when the game is over. Plain DOM over the canvas.
  */
 
-import { createRefCard } from './refcard.js?v=4690f3a';
-import { screenFrame, chainBackdrop, cardFan, ornament } from './title.js?v=4690f3a';
+import { createRefCard } from './refcard.js?v=c5cc373';
+import { screenFrame, chainBackdrop, cardFan, ornament } from './title.js?v=c5cc373';
 
 /** `faceOf(key)` is the finished face of a card (the canvas the table's card is textured from), so the preview shows the same words. */
 export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {

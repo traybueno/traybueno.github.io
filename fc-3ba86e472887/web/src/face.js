@@ -3,7 +3,7 @@
  * edited in `src/cards.js` and nothing else. The lettering matches the original printed cards: a slab serif drawn in the card's frame colour, centred in the
  * title bar, the type bar and the text box, with the same stepped pixel edge as the art.
  */
-import { CARDS } from '../../src/index.js?v=4690f3a';
+import { CARDS } from '../../src/index.js?v=c5cc373';
 
 export const FONT = { family: 'Roboto Slab', weights: [500, 700] };
 const WEIGHT = { title: 700, type: 500, body: 500 }, SPACING = { title: 1, type: 3, body: 2 };

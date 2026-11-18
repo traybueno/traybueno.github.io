@@ -3,7 +3,7 @@
  *
  * A turn has two allowances, `state.used = { field, chain }`, taken in either order (or not at all):
  *   Field: Deploy (an instant creature, the Lantern Keeper, is deployed without it), Attack (a second attack is part of it when the attacker has one), move a Guardian, or Recover (stand all your spent creatures; free while you have a Heaven's Resolve).
- *   Chain: Wind one spell (Fireball, Shift, Behind You or Shadow Step) onto the right end of the Chain, or Release the Chain.
+ *   Chain: Wind one spell (Fireball, Shift, Behind You or Shadow Step) into the next free slot of the Chain, or Release the Chain.
  * Instants (Rally, Witch's Kiss) are played from the hand: free, unlimited, any time on your own turn, never wound.
  * Phases: 'play' (the turn), 'chain' (a released Chain is resolving: the head spell needs a target or a skip), 'bonus' (a second attack, optional), 'over'.
  * Every move is complete: `{ type, id, ... }` with its own target. `legalMoves(state)` lists them, `apply(state, move)` returns a new state and never mutates.
@@ -12,8 +12,8 @@
  * enter spent and never ready, so any hit defeats them). Nothing else is stored on a card.
  * The end of the piles, per player: the draw that empties a player's own pile discards that player's Guardians, and while their pile is empty they can bring no Guardian into play.
  */
-import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=4690f3a';
-import { drawCards } from './state.js?v=4690f3a';
+import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=c5cc373';
+import { drawCards } from './state.js?v=c5cc373';
 
 /** The cards a Guardian may guard. */
 const GUARDABLE = ['heart', 'knight', 'maniac', 'angel', 'lantern', 'portal', 'resolve'];
@@ -91,7 +91,7 @@ function startTurn(s) {
 }
 
 // ---- what can be done --------------------------------------------------------------------------------------------------------------------
-/** Winding `c`: always onto the right end of the Chain; the spells already wound keep their order. `pos`, `order`, `rearranged` and `keys` describe the result. */
+/** Winding `c`: always into the next free slot of the Chain; the spells already wound keep their order. `pos`, `order`, `rearranged` and `keys` describe the result. */
 const windMoves = (p, c) => [{ type: 'wind', id: `wind:${c.id}`, cardId: c.id, pos: p.chain.length, order: p.chain.map((x) => x.id), rearranged: false, keys: [...p.chain.map((x) => x.key), c.key].join() }];
 /** Shift: an enemy Guardian, or any spell wound in the enemy's Chain; either goes back to its owner's hand. The enemy's Chain is never the one resolving. */
 function shiftMoves(s, p) {
@@ -156,7 +156,7 @@ function instantMoves(s, p) {
   for (const c of p.hand) if (INSTANTS.includes(c.key)) for (const m of spellMoves(s, p, c.key)) moves.push({ ...m, type: 'cast', spell: c.key, cardId: c.id, id: `cast:${c.id}:${m.id}` });
   return moves;
 }
-/** The Chain action: Wind one spell (Fireball, Shift, Behind You or Shadow Step) onto the right end, or Release the Chain. */
+/** The Chain action: Wind one spell (Fireball, Shift, Behind You or Shadow Step) into the next free slot, or Release the Chain. */
 function chainMoves(s, p) {
   const moves = [];
   if (s.used.chain) return moves;

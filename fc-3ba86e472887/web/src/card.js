@@ -5,7 +5,7 @@
  * `aim` sets where it should be (a placement from layout.js plus any hover or drag change); each frame `update` carries it there.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=4690f3a';
+import { CARD_W, CARD_H } from './layout.js?v=c5cc373';
 
 const R = 0.14;
 function rounded(w, h, r) {

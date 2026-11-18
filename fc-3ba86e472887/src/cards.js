@@ -46,7 +46,7 @@ export const REFERENCE = {
       { topic: 'draw', name: 'Draw', text: 'Draw a card.' },
       { topic: 'actions', text: 'One of each, in either order, or skip either.', actions: [
         { topic: 'field', name: 'Field', options: ['Deploy', 'Attack', 'Move a Guardian', 'Recover (ready your spent Knights and Maniacs)'] },
-        { topic: 'chain', name: 'Chain', options: ['Wind (a spell onto the right end)', 'Release: left to right, skip any you like'] },
+        { topic: 'chain', name: 'Chain', options: ['Wind (a spell into the next free slot)', 'Release: top to bottom, I then II then III, skip any you like'] },
       ] },
       { topic: 'end', name: 'End', text: 'End your turn.' },
     ],
