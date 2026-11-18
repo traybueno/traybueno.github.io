@@ -284,6 +284,17 @@
 <body>
 <canvas id="table"></canvas>
 <div id="boot" style="position:fixed;inset:0;z-index:50;background:#000"></div>
+<script>
+  // Black until the first screen (title or table) is up, so the bare table never shows while loading. Self-contained: it clears itself when a screen
+  // element appears, and after 6 s regardless, so it can never leave the page black.
+  (function () {
+    var b = document.getElementById('boot'); if (!b) return;
+    var done = function () { b.remove(); mo.disconnect(); };
+    var mo = new MutationObserver(function () { var s = document.querySelector('.start:not([hidden]), .cover:not([hidden])'); if (s) requestAnimationFrame(function () { requestAnimationFrame(done); }); });
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+    setTimeout(done, 6000);
+  })();
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
