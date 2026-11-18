@@ -248,12 +248,13 @@ function resolve(s, p, kind, legal, by) {
     const at = locate(s, legal.targetId), c = at.card, q = at.p, slot = at.zone === 'chain' ? q.chain.indexOf(c) : undefined;
     q[at.zone].splice(q[at.zone].indexOf(c), 1);                 // from a discard pile, or from a Chain (which closes up)
     clean(c); c.owner = p.idx;                                   // it changes sides
-    if (isCreature(c)) {                                         // a Guardian or an Angel enters ready (18 Nov 2026), any other creature spent; a Guardian guards the card chosen
-      if (c.key !== 'guardian' && c.key !== 'angel') c.spent = true;
+    const inPlay = isCreature(c) || kindOf(c) === 'device';      // a creature or a device is played free (no Field action): every creature enters ready (18 Nov 2026), a Guardian guarding the card chosen; a device enters spent like any device
+    if (inPlay) {
+      if (kindOf(c) === 'device') c.spent = true;
       p.field.push(c);
       if (c.key === 'guardian') c.guards = legal.toId;
-    } else p.hand.push(c);                                       // anything else (a device, a spell, an instant) goes to the hand; a device is then deployed with the Field action
-    ev(s, { t: 'kiss', id: c.id, zone: at.zone, from: q.idx, slot, to: isCreature(c) ? 'field' : 'hand', guards: c.guards, by });
+    } else p.hand.push(c);                                       // a spell or an instant goes to the hand
+    ev(s, { t: 'kiss', id: c.id, zone: at.zone, from: q.idx, slot, to: inPlay ? 'field' : 'hand', guards: c.guards, by });
   } else if (kind === 'rally') {
     const c = card(legal.targetId);
     delete c.spent;                                              // it readies at once; the Field action is still the player's

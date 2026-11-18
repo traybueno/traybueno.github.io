@@ -38,6 +38,10 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
   menuBtn.addEventListener('click', () => onMenu());
   // The dark between the title and the table (Start game): fades in, holds, fades out over the deal. Times in ms, matching the CSS.
   const veil = el('div', 'veil'), VEIL_IN = 550, VEIL_HOLD = 750;
+  // Learn to play: Continue, with the other buttons at the top right (Enter works too).
+  const cont = button('cont', 'Continue'); cont.hidden = true; bar.prepend(cont); let onCont = null;
+  cont.addEventListener('click', () => onCont?.());
+  addEventListener('keydown', (e) => { if (e.key === 'Enter' && !cont.hidden && layer.hidden && over.hidden) { e.preventDefault(); onCont?.(); } });
   lessonBox.hidden = true; cover.hidden = true; over.hidden = true; start.hidden = true; hist.hidden = true; tab.hidden = true; tab.type = 'button'; hint.style.opacity = 0;
   cover.addEventListener('pointerdown', () => { if (performance.now() - cover.shownAt > 350) { cover.hidden = true; onCoverDone(); } });
   const layer = el('div', 'layer'); layer.hidden = true;                             // the panels: one at a time, stacked so Back returns to the one before
@@ -112,17 +116,19 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
       const opts = Object.entries(profiles).map(([id, p]) => [id, p.name, p.blurb]);
       const sel = selector('opp', opts, () => chosen, (v) => { chosen = v; onPick?.(v); });
       // Start game: the press is heard on its own, the screen goes dark and quiet for a breath, then the table comes up out of the dark as the deal begins.
-      const go = button('go', 'Start game', null, true);
-      go.addEventListener('click', () => {
+      // Learn to play leaves the title the same way.
+      const leave = (then) => {
         if (veil.classList.contains('in')) return;
         document.removeEventListener('keydown', titleKeys); onLeave?.();
         veil.classList.add('in');
         setTimeout(() => {
-          start.hidden = true; onStart(chosen);
+          start.hidden = true; then();
           setTimeout(() => veil.classList.remove('in'), 60);
         }, VEIL_IN + VEIL_HOLD);
-      });
-      const learn = el('button', 'plink learn', 'Learn to play'); learn.type = 'button'; learn.addEventListener('click', () => { onClose = null; stack.length = 0; onLearn?.(); });
+      };
+      const go = button('go', 'Start game', null, true);
+      go.addEventListener('click', () => leave(() => onStart(chosen)));
+      const learn = el('button', 'plink learn', 'Learn to play'); learn.type = 'button'; learn.addEventListener('click', () => { onClose = null; stack.length = 0; leave(() => onLearn?.()); });
       const links = el('div', 'tlinks'), sl = el('button', 'plink', 'Settings'), dl = el('button', 'plink', 'Developer tools'); sl.type = dl.type = 'button';
       sl.addEventListener('click', () => { onClose = null; stack.length = 0; settingsPanel(settings); });
       dl.addEventListener('click', () => { onClose = null; stack.length = 0; panels.open('Developer tools', column(dev), backBtn()); });
@@ -140,19 +146,20 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
       };
       document.addEventListener('keydown', titleKeys);
     },
-    /** Hide the title screen (a lesson was picked from it). */
+    /** Hide the title screen (Learn to play was picked from it). */
     hideTitle() { start.hidden = true; document.removeEventListener('keydown', titleKeys); },
-    /** Learn to play: the list of lessons. `items` is [[label, onClick, sub]]; a lesson already finished says so in its sub line. */
-    lessons(items) { onClose = null; stack.length = 0; panels.open('Learn to play', column(items), backBtn()); },
-    /** The lesson's label and goal at the top of the table (null hides it). */
+    /** Learn to play: the chapter (`label`) and where it is in the story (`at`), at the top left of the table (null hides it). */
     lesson(info) {
       lessonBox.hidden = !info; if (!info) return;
-      lessonBox.replaceChildren(el('div', 'lk', info.label), el('div', 'lg', info.goal));
+      if (lessonBox.dataset.k === info.label + info.at) return; lessonBox.dataset.k = info.label + info.at;
+      lessonBox.replaceChildren(el('div', 'lk', info.at), el('div', 'lg', info.label));
     },
-    /** A lesson is complete: what it taught, and the way on. */
-    lessonDone({ title, text, next, onNext, onLessons }) {
-      const row = el('div', 'row'), list = button('', 'Lessons', null, true), go = button('go', next, null, true);
-      list.addEventListener('click', () => onLessons()); go.addEventListener('click', () => onNext()); row.append(list, go);
+    /** Learn to play: show Continue (`fn` runs when it is pressed), or hide it (null). */
+    cont(fn) { onCont = fn; cont.hidden = !fn; },
+    /** Learn to play is complete: what it taught, and the way on (`next` the main button, `back` the other). */
+    lessonDone({ title, text, next, onNext, back, onBack }) {
+      const row = el('div', 'row'), other = button('', back, null, true), go = button('go', next, null, true);
+      other.addEventListener('click', () => onBack()); go.addEventListener('click', () => onNext()); row.append(other, go);
       over.replaceChildren(el('div', 'who', title), el('div', 'ltext', text), row); over.hidden = false;
     },
     /** Is the title (or the bot chooser) up? */

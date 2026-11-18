@@ -116,7 +116,7 @@ export function describeEvents(after) {
       case 'rally': out.push(`Rally readies ${w(e.id)}`); break;
       case 'behind': out.push(`Behind You hits ${e.hits.length} creature${e.hits.length === 1 ? '' : 's'}: ${e.hits.map(nameOf).join(', ') || 'none'}`); break;
       case 'shadow': out.push(`Shadow Step lets ${w(e.id)} attack`); break;
-      case 'kiss': out.push(`Witch’s Kiss takes ${nameOf(e.id)} from p${e.from}'s ${e.zone}${e.to === 'field' ? '; it enters spent' : '; it goes to hand'}`); break;
+      case 'kiss': out.push(`Witch’s Kiss takes ${nameOf(e.id)} from p${e.from}'s ${e.zone}${e.to === 'field' ? '; it enters play ready' : '; it goes to hand'}`); break;
       case 'skip': out.push(`${nameOf(e.id)} is skipped`); break;
       case 'end': out.push(`p${e.p} ends the turn`); break;
       case 'win': out.push(`p${e.p} WINS`); break;

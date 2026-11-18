@@ -22,7 +22,7 @@ export const CARDS = {
   behind: { name: 'Behind You', kind: 'spell', text: 'Hit every creature, yours too.' },
   shadow: { name: 'Shadow Step', kind: 'spell', text: 'A Knight or Maniac of yours attacks for free, even if spent.' },
   rally: { name: 'Rally', kind: 'instant', text: 'Ready one of your spent creatures.' },
-  kiss: { name: 'Witch’s Kiss', kind: 'instant', text: 'Take a card from any discard pile or Chain. A creature enters on your side (Guardians and Angels ready, others spent); anything else goes to your hand.' },
+  kiss: { name: 'Witch’s Kiss', kind: 'instant', text: 'Take a card from any discard pile or Chain and play it free, ready. A spell goes to your hand.' },
 };
 
 /** The deck each player shuffles: 25 cards. Each player also starts with a Heart and a Guardian guarding it, both outside the deck. */

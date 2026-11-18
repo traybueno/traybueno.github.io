@@ -236,11 +236,17 @@
   .tlinks .dot { font-size: 7px; color: #d9a441; }
   .tlinks .plink.learn { opacity: .9; color: #fff8dc; }
   /* Learn to play: the lesson's name and goal at the top middle of the table, and what it taught when it is complete. */
-  .lesson { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 2; max-width: min(46vw, 560px); text-align: center; pointer-events: none; text-shadow: 0 0 6px #000; }
+  .lesson { position: fixed; top: max(16px, env(safe-area-inset-top)); left: max(22px, env(safe-area-inset-left)); z-index: 2; text-align: left; pointer-events: none;
+            padding: 8px 26px 10px; background: rgba(6, 5, 8, .92); border: 1px solid rgba(236, 226, 189, .55); box-shadow: 0 0 0 3px rgba(6, 5, 8, .92); }
   .lesson[hidden] { display: none; }
-  .lesson .lk { font: 700 12px 'Roboto Slab', Georgia, serif; letter-spacing: .22em; text-transform: uppercase; color: #d9a441; }
-  .lesson .lg { margin-top: 5px; font-size: 15px; line-height: 1.35; letter-spacing: .03em; }
-  @media (max-width: 760px) { .lesson { max-width: 60vw; } .lesson .lg { font-size: 13px; } }
+  .lesson .lk { font: 700 11px 'Roboto Slab', Georgia, serif; letter-spacing: .24em; text-transform: uppercase; color: #d9a441; }
+  .lesson .lg { margin-top: 3px; font: 700 20px 'Roboto Slab', Georgia, serif; letter-spacing: .08em; color: #fff8dc; white-space: nowrap; }
+  /* Learn to play's demonstration mouse (guide.js). */
+  .guide { position: fixed; inset: 0; z-index: 6; pointer-events: none; opacity: 0; }
+  .gcur, .gghost, .gring { position: absolute; left: 0; top: 0; will-change: transform; }
+  .gcur svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .8)); }
+  .gghost { border: 1px dashed rgba(236, 226, 189, .85); background: rgba(236, 226, 189, .06); opacity: 0; transition: opacity .15s; }
+  .gring { width: 34px; height: 34px; border: 2px solid #ece2bd; border-radius: 50%; opacity: 0; transition: opacity .12s, transform .12s; }
   .over .ltext { max-width: min(80vw, 560px); margin-top: 14px; text-align: center; font-size: 17px; line-height: 1.45; letter-spacing: .03em; }
   .plink { background: none; border: 0; padding: 6px 4px; font: inherit; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--cream); opacity: .55; cursor: pointer; }
   .plink:hover, .plink:focus-visible { opacity: 1; outline: none; }
