@@ -266,4 +266,6 @@ try {
 } catch (e) {
   document.body.append(Object.assign(document.createElement('pre'), { textContent: String(e.message || e), style: 'color:#ece2bd;padding:16px' }));
   throw e;
+} finally {
+  document.getElementById('boot')?.remove();                               // black until the first screen (the title) is up, so the bare table never shows while loading
 }
