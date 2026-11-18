@@ -128,14 +128,15 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
       };
       const go = button('go', 'Start game', null, true);
       go.addEventListener('click', () => leave(() => onStart(chosen)));
-      const learn = el('button', 'plink learn', 'Learn to play'); learn.type = 'button'; learn.addEventListener('click', () => { onClose = null; stack.length = 0; leave(() => onLearn?.()); });
+      const learn = button('go', 'Learn to play', null, true); learn.addEventListener('click', () => { onClose = null; stack.length = 0; leave(() => onLearn?.()); });
       const links = el('div', 'tlinks'), sl = el('button', 'plink', 'Settings'), dl = el('button', 'plink', 'Developer tools'); sl.type = dl.type = 'button';
       sl.addEventListener('click', () => { onClose = null; stack.length = 0; settingsPanel(settings); });
       dl.addEventListener('click', () => { onClose = null; stack.length = 0; panels.open('Developer tools', column(dev), backBtn()); });
-      links.append(learn, el('span', 'dot', '◆'), sl, el('span', 'dot', '◆'), dl);
+      links.append(sl, el('span', 'dot', '◆'), dl);
       const body = el('div', 'tbody'), pickRow = el('div', 'tpick');
       pickRow.append(el('div', 'k', 'Opponent'), sel.el);
-      body.append(name, cardFan(faceUrl), pickRow, go, links);
+      const mains = el('div', 'tmain'); mains.append(go, learn);
+      body.append(name, cardFan(faceUrl), pickRow, mains, links);
       start.className = 'start title-screen';
       start.replaceChildren(chainBackdrop(), screenFrame(), body); start.hidden = false; menuBtn.hidden = true;
       document.removeEventListener('keydown', titleKeys);
