@@ -3,9 +3,9 @@
  * accepted. A drop on a legal target makes that move (asking a second question in place if the move is not yet complete); a drop anywhere else lets
  * the card go back where it came from.
  */
-import { CARDS, isGuarded, locate } from '../../src/index.js';
-import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js';
-import { fieldZone, pileZone, slotRect, handSpot } from './layout.js';
+import { CARDS, isGuarded, locate } from '../../src/index.js?v=4690f3a';
+import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=4690f3a';
+import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=4690f3a';
 
 const MOVE_PX = 7;
 const inRect = (p, r, m = 0.5) => Math.abs(p.x - r.x) <= r.w / 2 + m && Math.abs(p.z - r.z) <= r.d / 2 + m;

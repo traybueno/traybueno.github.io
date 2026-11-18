@@ -1,6 +1,6 @@
 /** The table itself: the black board with its double frame and centre divider, the three Chain slots, and their numerals. Drawn once on canvases. */
 import * as THREE from 'three';
-import { TABLE, CARD_W, CARD_H, CHAIN_SCALE } from './layout.js';
+import { TABLE, CARD_W, CARD_H, CHAIN_SCALE } from './layout.js?v=4690f3a';
 
 const CREAM = '#ece2bd', PPU = 80;                       // line colour, canvas pixels per world unit
 
