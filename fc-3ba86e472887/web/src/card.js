@@ -35,6 +35,31 @@ const AXES = ['x', 'y', 'z', 'yaw', 'spin', 'scale', 'face'];
 const crit = (k) => [k, 2 * Math.sqrt(k)];
 export const SPRING = { settle: crit(520), follow: crit(1400), hover: crit(1000) };
 
+/**
+ * The veil: a layer of big square pixels over a card's face, in a device's colour, for the moments a device touches a card. The pixels sit on a grid near the
+ * art's own pixel size and fill in with the art's checkerboard shading at partial cover. `uAmount` (0 to 1) is how much of the face is covered; `uShape` how
+ * the cover spreads: 0 scattered, 1 a swirl (the Warp Portal), 2 from the edges in (the Lantern Keeper), 3 a band rising up the card (Heaven's Resolve).
+ */
+const VEIL = {
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform vec3 uColor; uniform float uAmount, uAlpha, uShape, uSeed, uSpin;
+    varying vec2 vUv;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758.5453); }
+    void main() {
+      vec2 grid = vec2(40.0, 60.0), cell = floor(vUv * grid), c = (cell + 0.5) / grid, d = (c - 0.5) * vec2(1.0, 1.5);
+      float n = hash(cell), checker = mod(cell.x + cell.y, 2.0), g, on;
+      if (uShape < 0.5) g = n;
+      else if (uShape < 1.5) { float a = atan(d.y, d.x) / 6.2832 + 0.5, r = length(d); g = mix(fract(a * 3.0 - r * 2.2 + uSpin), r * 1.3, 0.35); }
+      else if (uShape < 2.5) { float e = min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y) * 1.5) * 2.0; g = clamp(e, 0.0, 1.0); }
+      else g = 0.0;
+      if (uShape > 2.5) { float band = abs(c.y - (uAmount * 1.4 - 0.2)); on = step(band, 0.05 + 0.09 * n) * (1.0 - checker * step(0.04, band)); }
+      else on = step(mix(n, g, 0.65) + checker * 0.12, uAmount * 1.15);
+      if (on < 0.5) discard;
+      gl_FragColor = vec4(uColor * (0.85 + 0.25 * checker), uAlpha * (0.8 + 0.2 * checker));
+    }`,
+};
+
 const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0), X = new THREE.Vector3(1, 0, 0);
 const qFace = new THREE.Quaternion(), qFlat = new THREE.Quaternion(), qTmp = new THREE.Quaternion();
 /** Light comes from the top left of the screen: how far the edge and shadow fall, in card units, for a card `h` above the table. */
@@ -44,6 +69,7 @@ export class Card {
   /** `art` is what loadArt returned. */
   constructor(art, id) {
     this.art = art; this.id = id; this.key = undefined; this.base = null; this.dim = 1; this.flashT = 0; this.spring = SPRING.settle; this.boost = 0; this.order = 0;
+    this.landing = null;               // a sound to play when the card next comes to rest on the table (set by fx.js), and until when to wait for it
     this.held = null;                  // { pose, spring }: a pose the card is kept at for now (the motion of a move in progress), instead of its place
     this.faceOverride = undefined;     // what to show instead of the card's own face while it turns over (null is the back)
     const { face, shadowGeo, shadowTex } = resources();
@@ -56,7 +82,11 @@ export class Card {
     this.edge = new THREE.Mesh(face, this.edgeMat);
     this.front = new THREE.Mesh(face, this.frontMat); this.front.userData.card = this;
     this.glow = new THREE.Mesh(face, this.glowMat);
-    this.flat.add(this.shadow, this.edge, this.front, this.glow);
+    this.veilMat = new THREE.ShaderMaterial({ ...VEIL, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+      uniforms: { uColor: { value: new THREE.Color() }, uAmount: { value: 0 }, uAlpha: { value: 1 }, uShape: { value: 0 }, uSeed: { value: Math.random() * 100 }, uSpin: { value: 0 } } });
+    this.veil = new THREE.Mesh(face, this.veilMat); this.veil.visible = false;
+    this.fade = 1; this.tilt = 0; this.bright = 0;  // set by fx.js for a moment: how solid the card is (1 solid), how far it tips back (radians), how much a spent card is lit up (0 to 1)
+    this.flat.add(this.shadow, this.edge, this.front, this.veil, this.glow);
     this.s = Object.fromEntries(AXES.map((a) => [a, new Spring(0)]));
   }
   /** Show `key` (null for a hidden card, drawn as a card back) face up. */
@@ -84,6 +114,7 @@ export class Card {
   update(dt, camQ) {
     const [k, c] = this.spring, n = 3;
     for (let i = 0; i < n; i++) for (const a of AXES) this.s[a].step(dt / n, k, c);
+    if (this.landing) this.land();
     this.dim += ((this.dimTarget ?? 1) - this.dim) * (1 - Math.exp(-dt * 12));
     if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt * 3.4);
     this.glowMat.opacity = this.flashT * 0.4;
@@ -106,12 +137,30 @@ export class Card {
     const buried = (this.base?.zone === 'deck' || this.base?.zone === 'discard') && !this.base.top;     // (its edge is still drawn: that is the pile's thickness)
     this.shadow.visible = !buried; this.glow.visible = this.flashT > 0;
     this.edge.visible = this.base?.zone === 'deck';                       // only a deck has a visible thickness; on any other card an offset edge reads as a stray line in the card's colour
-    this.frontMat.color.setScalar(this.dim);
+    this.frontMat.color.setScalar(Math.min(1, this.dim + 0.5 * this.bright));
+    this.frontMat.opacity = this.fade; this.shadowMat.opacity *= this.fade;
+    this.flat.rotation.x = this.tilt;
+    const u = this.veilMat.uniforms; this.veil.visible = u.uAmount.value > 0.001 && u.uAlpha.value > 0.001;
     // Draw order: higher cards over lower ones; within a card, shadow, edge, face, flash.
     const base = (Math.round(h * 60) + this.boost) * 10;
     this.order = base;
-    this.shadow.renderOrder = base; this.edge.renderOrder = base + 1; this.front.renderOrder = base + 2; this.glow.renderOrder = base + 3;
+    this.shadow.renderOrder = base; this.edge.renderOrder = base + 1; this.front.renderOrder = base + 2; this.veil.renderOrder = base + 3; this.glow.renderOrder = base + 4;
   }
+  /** The card is set down: once it is no longer held and has all but reached its place, the landing sound plays (once). It is given up if that takes too long. */
+  land() {
+    const s = this.s, L = this.landing;
+    if (performance.now() > L.until) { this.landing = null; return; }
+    if (this.held || Math.abs(s.y.x - s.y.t) > 0.06 || Math.hypot(s.x.x - s.x.t, s.z.x - s.z.t) > 0.35) return;
+    this.landing = null; L.fn();
+  }
+  /** Set the veil: { amount, alpha, shape, spin, color } (any of them; color is a CSS colour). */
+  setVeil(o) {
+    const u = this.veilMat.uniforms;
+    if (o.color) u.uColor.value.set(o.color);
+    for (const [k, n] of [['amount', 'uAmount'], ['alpha', 'uAlpha'], ['shape', 'uShape'], ['spin', 'uSpin']]) if (o[k] !== undefined) u[n].value = o[k];
+  }
+  /** Back to plain: no veil, solid, flat, not lit up. */
+  calm() { this.setVeil({ amount: 0, alpha: 1, spin: 0 }); this.fade = 1; this.tilt = 0; this.bright = 0; }
   /** A brief white flash over the face. */
   flash() { this.flashT = 1; }
 }

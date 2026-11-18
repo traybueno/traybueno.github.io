@@ -10,7 +10,8 @@
  * The log is the same format as a bot batch's observer log, so `replay` rebuilds a game from it and `analyze` (web/sim/analyze.js) reports on it.
  */
 import { newGame, legalMoves, apply, viewFor, locate, isGuarded, isBacked, protector, hasPortal, hasResolve, CARDS, DECK, CHAIN_MAX } from '../../src/index.js';
-import { LOG_SCHEMA, DEFAULT_LIMITS, prepare, snapshot, keyOf } from './match.js';
+import { LOG_SCHEMA, DEFAULT_LIMITS, POLICIES, prepare, snapshot, keyOf } from './match.js';
+import { PROFILES } from './bot.js';
 
 export const AGENT_VERSION = 'agent/1';
 const bare = (s) => { const { events, ...rest } = s; return rest; };
@@ -36,14 +37,14 @@ export function describeMove(s, m) {
   switch (m.type) {
     case 'deploy': return m.dest === 'guard' ? `Deploy ${nameOf(m.cardId)} to guard ${w(m.targetId)} (Field action)` : `Deploy ${nameOf(m.cardId)} to your field${keyOf(m.cardId) === 'maniac' ? ' (enters spent)' : ''} (Field action)`;
     case 'attack': return `${m.bonus ? 'Second attack: ' : ''}${nameOf(m.cardId)} attacks ${w(m.targetId)}${m.bonus ? '' : ' (Field action)'}`;
-    case 'reguard': return m.dest === 'none' ? `Take ${nameOf(m.cardId)} off the card it guards; it guards nothing and turns spent (Field action)` : `Move ${nameOf(m.cardId)} to guard ${w(m.targetId)}; it turns spent (Field action)`;
+    case 'reguard': return `Move ${nameOf(m.cardId)} to guard ${w(m.targetId)} (Field action; it stays ready)`;
     case 'recover': return `Recover: stand all ${me}'s spent creatures${hasResolve(s, s.turn) ? ' (free: Heaven’s Resolve)' : ' (Field action)'}`;
-    case 'wind': return `Wind ${nameOf(m.cardId)} into slot ${SLOT[m.pos]}${m.rearranged ? ` after rearranging the Chain to ${m.order.map(nameOf).join(', ') || 'empty'}` : ''}; the Chain then reads ${m.keys.split(',').map((k) => CARDS[k].name).join(', ')} (Magic action)`;
-    case 'release': return `Release the Chain: its spells resolve left to right (Magic action)`;
+    case 'wind': return `Wind ${nameOf(m.cardId)} onto the right end of the Chain; the Chain then reads ${m.keys.split(',').map((k) => CARDS[k].name).join(', ')} (Chain action)`;
+    case 'release': return `Release the Chain: its spells resolve left to right (Chain action)`;
     case 'cast': return `Play the instant ${nameOf(m.cardId)}: ${m.spell === 'rally' ? `ready ${w(m.targetId)}` : `take ${w(m.targetId)}${m.toId ? `, it will guard ${w(m.toId)}` : ''}`} (free)`;
     case 'fireball': return `Fireball hits ${w(m.targetId)}`;
-    case 'shift': return locate(s, m.targetId)?.zone === 'chain' ? `Shift returns ${w(m.targetId)} to its owner's hand` : `Shift takes ${w(m.targetId)} off the card it guards`;
-    case 'behind': return 'Behind You hits every unguarded creature';
+    case 'shift': return locate(s, m.targetId)?.zone === 'chain' ? `Shift returns ${w(m.targetId)} to its owner's hand` : `Shift returns ${w(m.targetId)} to its owner's hand`;
+    case 'behind': return 'Behind You hits every unguarded creature, both players\' (yours too)';
     case 'shadow': return `Shadow Step: ${nameOf(m.attackerId)} attacks ${w(m.targetId)} (no Field action)`;
     case 'rally': return `Rally readies ${w(m.targetId)}`;
     case 'kiss': return `Witch’s Kiss takes ${w(m.targetId)}${m.toId ? `, it will guard ${w(m.toId)}` : ''}`;
@@ -60,7 +61,7 @@ function inField(s, c) {
   const tags = [];
   if (CARDS[c.key].kind === 'creature') tags.push(c.spent ? 'SPENT' : 'ready');
   if (c.key === 'guardian') tags.push(c.guards ? `guards ${c.guards === s.players[c.owner].hearts[0].id ? 'the Heart' : nameOf(c.guards)}` : 'guards nothing');
-  if (c.key === 'knight' && isBacked(s, c)) tags.push('backed');
+  if (c.key === 'knight' && isBacked(s, c)) tags.push('paired');
   if (c.key !== 'guardian' && isGuarded(s, c)) tags.push('guarded');
   return `${named(c)}${tags.length ? ` (${tags.join(', ')})` : ''}`;
 }
@@ -69,7 +70,7 @@ const list = (cs, f = named) => (cs.length ? cs.map(f).join('; ') : '-');
 /** The whole position as text. `s` may be a `viewFor` view (the other hand and the piles are then hidden). `moves: false` leaves out the legal-moves list. */
 export function describeState(s, { gameId = null, moves = true } = {}) {
   const out = [];
-  const used = s.used ? `Field action ${s.used.field ? 'used' : 'free'}, Magic action ${s.used.magic ? 'used' : 'free'}` : '';
+  const used = s.used ? `Field action ${s.used.field ? 'used' : 'free'}, Chain action ${s.used.chain ? 'used' : 'free'}` : '';
   out.push(`${gameId ? `${gameId} | ` : ''}turn ${s.turnNumber} | ${s.phase === 'over' ? `GAME OVER, p${s.winner} wins` : `p${s.turn} to play | phase ${s.phase} | ${used}`}`);
   for (const p of s.players) {
     const h = p.hearts[0], prot = protector(s, p.idx), tags = [h.spent ? 'SPENT (one more blow ends the game)' : 'ready', ...(isGuarded(s, h) ? ['guarded'] : []), ...(prot ? [`a ready Angel would take the blow`] : [])];
@@ -109,7 +110,8 @@ export function describeEvents(after) {
       case 'release': out.push(`p${e.p} releases the Chain`); break;
       case 'cast': out.push(`${nameOf(e.id)} is played (${e.from})`); break;
       case 'fireball': out.push(`Fireball hits ${w(e.hit)}`); break;
-      case 'shift': out.push(`Shift takes ${w(e.id)} off its card`); break;
+      case 'shift': out.push(`Shift returns ${nameOf(e.id)} to its owner's hand`); break;
+      case 'return': out.push(`${nameOf(e.id)} goes back to its owner's hand (the card it guarded left play)`); break;
       case 'recall': out.push(`Shift returns ${nameOf(e.id)} to p${after.players.findIndex((p) => p.hand.some((c) => c.id === e.id))}'s hand`); break;
       case 'rally': out.push(`Rally readies ${w(e.id)}`); break;
       case 'behind': out.push(`Behind You hits ${e.hits.length} creature${e.hits.length === 1 ? '' : 's'}: ${e.hits.map(nameOf).join(', ') || 'none'}`); break;
@@ -126,13 +128,14 @@ export function describeEvents(after) {
 
 /** The rules, short, with the cards read from the engine's own data. */
 export function rulesText() {
-  const cards = Object.entries(CARDS).filter(([k]) => k !== 'heart').map(([k, c]) => `  ${c.name} x${DECK[k]} (${c.kind}): ${c.text}`);
+  const cards = Object.entries(CARDS).filter(([k]) => k !== 'heart').map(([k, c]) => `  ${c.name} x${DECK[k]} (${c.instant ? 'instant ' : ''}${c.kind}): ${c.text}`);
   return [
-    'FIELD + CHAIN, RESTRICTED. Two players, p0 goes first. Defeat the other player\'s Heart: the first successful attack on it turns it spent, a second defeats it.',
+    'FIELD + CHAIN, RESTRICTED. Two players, p0 goes first. Defeat the other player\'s Heart: the first successful attack on it turns it spent AND DEFEATS THE ATTACKER (so it has no second attack); a second successful attack, by another creature, defeats the Heart. It takes two creatures to defeat a Heart.',
     `Each player has a Heart and a starting Guardian guarding it, and shuffles a ${Object.values(DECK).reduce((a, b) => a + b, 0)}-card deck; hand 5; draw one at the start of your turn (no reshuffle). No HP, mana or counters.`,
-    'Three rules: HIT a ready creature turns it spent; a hit on a spent creature or a device defeats it. SPENT creatures cannot attack or be moved; Recover or Rally stands them. GUARD: a guarded card cannot be hit by attacks or Fireballs (a Guardian guards one card; a ready Lantern Keeper guards your other spent creatures; a Warp Portal ignores Guard).',
-    'A turn has two allowances, each once, any order: FIELD action (deploy, attack, move a ready Guardian, or Recover) and MAGIC action (wind a Fireball/Shift/Behind You/Shadow Step into a Chain slot, or Release the Chain). Instants (Rally, Witch\'s Kiss) are free, any time on your turn. The Chain has three slots and resolves left to right; each spell may be skipped.',
-    'An attack turns the attacker spent. An attack on a Heart with a ready Angel defeats the Angel instead. A Maniac attacks twice; a Knight attacks twice while another of your Knights is ready ("backed").',
+    'Three rules: HIT a ready card turns it spent; a hit on a spent card defeats it (devices enter spent, so any hit defeats them). SPENT creatures cannot attack or be moved (except that a ready Lantern Keeper lets your other spent creatures attack as if ready); Recover or Rally stands them. GUARD: a guarded card cannot be hit by attacks or spells (a Guardian guards one card; a ready Lantern Keeper guards your other spent creatures; a Warp Portal lets your attacks ignore Guard). A Guardian whose card leaves play goes back to its owner\'s hand.',
+    'A turn has two allowances, each once, any order: FIELD action (deploy, attack, move a ready Guardian onto another card, or Recover; an instant creature such as the Lantern Keeper is deployed without it) and CHAIN action (wind a Fireball/Shift/Behind You/Shadow Step onto the right end of your Chain, or Release the Chain). Instants (Rally, Witch\'s Kiss) and card effects never use an allowance; instants are played any time on your turn. The Chain has three slots and resolves left to right; each spell may be skipped.',
+    'THE END OF THE PILES: when your own draw pile is empty, you have no Guardians: the draw that empties it discards yours, and you cannot bring one into play after.',
+    'Only Knights and Maniacs attack. An attack turns the attacker spent. An attack on a Heart with a ready Angel defeats the Angel instead (the attacker survives, spent). "Attacks twice": the second attack comes straight after the first, nothing between. A Maniac attacks twice; a Knight attacks twice if you have another Knight ("paired").',
     'Cards:', ...cards,
     'Full rules: docs/RULES.md. The engine decides what is legal: you only ever choose from the numbered list.',
   ].join('\n');
@@ -142,15 +145,18 @@ export function rulesText() {
  * Begin a game. Returns the game and its first records (the header and the first turn), in the format of a bot game's observer log.
  * `player` is the name both seats go under in the log and the reports (an agent plays both seats): "opus", "haiku", "agent"...
  */
-export function startGame({ seed = 1, setup = null, gameId = null, player = 'agent' } = {}) {
+export function startGame({ seed = 1, setup = null, gameId = null, player = 'agent', vs = null, agentSeat = 0 } = {}) {
   let game = newGame(seed, setup?.deck ? { deck: setup.deck } : {});
   if (setup) game = prepare(game, setup);
-  const bots = [player, player], id = gameId ?? `${player}-s${seed}`;
+  if (vs && !PROFILES[vs] && !POLICIES.includes(vs)) throw new Error(`Unknown bot "${vs}". Use ${[...Object.keys(PROFILES), ...POLICIES].join(', ')}.`);
+  if (![0, 1].includes(agentSeat)) throw new Error('--agent-seat must be 0 or 1.');
+  // With `vs`, the agent plays one seat and that bot plays the other: the game is named for both, so reports split by who played.
+  const bots = vs ? (agentSeat === 0 ? [player, vs] : [vs, player]) : [player, player], id = gameId ?? (vs ? `${bots[0]}-${bots[1]}-s${seed}` : `${player}-s${seed}`);
   const records = [
     { k: 'game', schema: LOG_SCHEMA, gameId: id, seed, bots, setup, limits: DEFAULT_LIMITS, versions: { agent: AGENT_VERSION, deck: setup?.deck ?? DECK }, initial: bare(game) },
     { k: 'turn', n: game.turnNumber, seat: game.turn, state: bare(game) },
   ];
-  return { game, gameId: id, bots, records };
+  return { game, gameId: id, bots, records, vs: vs ? { bot: vs, agentSeat } : null };
 }
 
 /** Which of the legal moves a player meant: an id (`attack:0-knight-2:1-heart-1`), or its number in the printed list (`3`). Throws, saying what was wrong, if it matches none. */
@@ -163,12 +169,12 @@ export function pick(game, what) {
 }
 
 /** Play one move. `i` is its number in the game, `note` the player's reason (kept in the log). Returns the new game, the records to append and the events in words. */
-export function step(game, move, { i, note = null } = {}) {
+export function step(game, move, { i, note = null, decision = null } = {}) {
   const legal = legalMoves(game), after = apply(game, move), seat = game.turn;
   const foeHeart = game.players[1 - seat].hearts[0].id;
   const wins = legal.filter((m) => m.targetId === foeHeart && (m.type === 'attack' || m.type === 'shadow') && apply(game, m).winner === seat).map((m) => m.id);
   const head = game.phase === 'chain' ? game.players[seat].chain[0].id : undefined;
-  const records = [{ k: 'act', i, n: game.turnNumber, seat, phase: game.phase, head, legal: legal.map((m) => m.id), wins: wins.length ? wins : undefined, move, decision: { kind: 'agent', ...(note ? { note } : {}) }, events: after.events }];
+  const records = [{ k: 'act', i, n: game.turnNumber, seat, phase: game.phase, head, legal: legal.map((m) => m.id), wins: wins.length ? wins : undefined, move, decision: decision ?? { kind: 'agent', ...(note ? { note } : {}) }, events: after.events }];
   if (after.phase !== 'over' && after.turnNumber !== game.turnNumber) records.push({ k: 'turn', n: after.turnNumber, seat: after.turn, state: bare(after) });
   return { game: after, records, text: describeEvents(after), over: after.phase === 'over' };
 }

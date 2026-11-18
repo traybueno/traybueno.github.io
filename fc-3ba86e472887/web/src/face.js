@@ -18,7 +18,7 @@ const BODY = { maxW: 740, maxH: 290, top: 63, floor: 40, pitch: 1.18, lift: 12 }
 
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 /** The type line of a card, or null for a card that prints none (the Heart). */
-export const typeLine = (card) => (card.kind === 'heart' ? null : cap(card.kind));
+export const typeLine = (card) => (card.kind === 'heart' ? null : (card.instant ? 'Instant ' : '') + cap(card.kind));      // the Lantern Keeper prints "Instant Creature"
 
 /** The frame colour of a blank: the average of its brightest pixels along the top border. */
 function frameColour(img) {
@@ -65,7 +65,8 @@ export function drawFace(blank, key) {
   let s = TITLE.size; while (s > 30 && width(s, card.name, 'title') > TITLE.maxW) s--;
   line(card.name, s, 'title', W / 2, centred(s, 'title', TITLE.cy));
   const type = typeLine(card), box = bars(blank);
-  if (type && box.type) line(type, TYPE.size, 'type', W / 2, centred(TYPE.size, 'type', (box.type[0] + box.type[1]) / 2 - TYPE.lift));
+  let ts = TYPE.size; while (type && ts > 30 && width(ts, type, 'type') > TITLE.maxW) ts--;                // "Instant Creature" is the longest type line
+  if (type && box.type) line(type, ts, 'type', W / 2, centred(ts, 'type', (box.type[0] + box.type[1]) / 2 - TYPE.lift));
 
   /** Greedy wrap to `max`. */
   const greedy = (size, max) => {

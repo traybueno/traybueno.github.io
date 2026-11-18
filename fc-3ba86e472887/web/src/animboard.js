@@ -19,12 +19,16 @@ const maybe = (step) => Object.assign((...a) => step(...a), { optional: true });
 const doing = (type, ok) => (moves, g) => moves.find((m) => m.type === type && apply(g, m).events.some(ok));
 /** Is `id` one of the opponent's cards (ids keep the seat they were dealt to) of this kind? */
 const foe = (g, id, k) => id.startsWith('1-') && key(g, id) === k;
+/** Is `id` one of the viewer's own cards (seat 0) of this kind? */
+const ours = (g, id, k) => id.startsWith('0-') && key(g, id) === k;
 const key = (g, id) => g.players.flatMap((p) => [...p.hearts, ...p.field, ...p.hand, ...p.discard, ...p.chain]).find((c) => c.id === id)?.key;
 
 const OPEN = { field: { 0: ['knight', 'knight', 'lantern'], 1: ['knight', 'knight', 'lantern'] }, discard: { 0: ['fireball', 'knight'], 1: ['fireball', 'rally'] } };
 const WOUND = { 0: ['fireball', 'behind', 'shift'], 1: ['fireball', 'shadow'] };
 /** The opponent's Heart in plain view: nothing guards it. */
 const bare = (g) => { for (const c of g.players[1].field) delete c.guards; return g; };
+/** A Guardian set out on the field guards a creature of its side (the first free one), or else the Heart. */
+const guarded = (seat) => (g) => { const p = g.players[seat], ks = p.field.filter((c) => c.key === 'knight'); p.field.filter((c) => c.key === 'guardian' && !c.guards).forEach((c, i) => { c.guards = ks[i]?.id ?? p.hearts[0].id; }); return g; };
 const spent = (g, seat, k) => { for (const c of g.players[seat].field) if (c.key === k) c.spent = true; return g; };
 
 export const SCENARIOS = [
@@ -48,6 +52,14 @@ export const SCENARIOS = [
   { id: 'rescue', group: 'Combat', name: 'An Angel saves the Heart', after: bare, setup: { ...OPEN, field: { 0: OPEN.field[0], 1: ['angel', 'knight'] } }, steps: [move('attack', (m, g) => key(g, m.targetId) === 'heart'), maybe(move('decline'))] },
   { id: 'win', group: 'Combat', name: 'The Heart falls (win)', after: bare, setup: { ...OPEN, spentHeart: [1] }, steps: [move('attack', (m, g) => key(g, m.targetId) === 'heart')] },
   { id: 'portal', group: 'Combat', name: 'Attack through a Warp Portal', setup: { ...OPEN, field: { 0: ['knight', 'portal'], 1: ['knight', 'lantern'] } }, steps: [doing('attack', (e) => e.t === 'attack' && e.portal), maybe(move('decline'))] },
+  // ---- devices: the moments a Warp Portal, a Lantern Keeper and a Heaven's Resolve touch several cards ----
+  { id: 'device-portal', group: 'Devices', name: 'Warp Portal comes in', after: guarded(1), setup: { field: { 0: ['knight', 'knight'], 1: ['knight', 'knight', 'guardian'] }, hand: { 0: ['portal'] } }, steps: [move('deploy', (m, g) => key(g, m.cardId) === 'portal')] },
+  { id: 'device-portal-opp', group: 'Devices', name: 'Their Warp Portal comes in', turn: 1, after: guarded(0), setup: { field: { 0: ['knight', 'knight', 'guardian'], 1: ['knight'] }, hand: { 1: ['portal'] } }, steps: [move('deploy', (m, g) => key(g, m.cardId) === 'portal')] },
+  { id: 'device-lantern', group: 'Devices', name: 'Lantern Keeper lights spent creatures', setup: { field: { 0: ['knight:spent', 'knight:spent', 'maniac'], 1: OPEN.field[1] }, hand: { 0: ['lantern'] } }, steps: [move('deploy', (m, g) => key(g, m.cardId) === 'lantern')] },
+  { id: 'device-lantern-attack', group: 'Devices', name: 'A lit creature attacks', setup: { field: { 0: ['knight:spent', 'lantern'], 1: ['knight', 'knight'] } }, steps: [doing('attack', (e) => e.t === 'attack' && e.lit), maybe(move('decline'))] },
+  { id: 'device-lantern-out', group: 'Devices', name: 'The Lantern’s light goes out', setup: { field: { 0: ['knight'], 1: ['knight:spent', 'knight:spent', 'lantern'] }, chain: { 0: ['fireball'] } }, steps: [move('release'), move('fireball', (m, g) => foe(g, m.targetId, 'lantern'))] },
+  { id: 'device-resolve', group: 'Devices', name: 'Heaven’s Resolve comes in', setup: { field: { 0: ['knight:spent', 'knight', 'maniac'], 1: OPEN.field[1] }, hand: { 0: ['resolve'] } }, steps: [move('deploy', (m, g) => key(g, m.cardId) === 'resolve')] },
+  { id: 'device-resolve-recover', group: 'Devices', name: 'A free Recover', setup: { field: { 0: ['knight:spent', 'knight:spent', 'resolve:spent'], 1: OPEN.field[1] } }, steps: [move('recover')] },
   // ---- spells ----
   { id: 'fireball', group: 'Spells', name: 'Fireball', setup: { ...OPEN, chain: { 0: ['fireball'] } }, steps: [move('release'), move('fireball', (m, g) => foe(g, m.targetId, 'knight'))] },
   { id: 'fireball-kill', group: 'Spells', name: 'Fireball defeats', after: (g) => spent(g, 1, 'knight'), setup: { ...OPEN, field: { 0: OPEN.field[0], 1: ['knight', 'knight'] }, chain: { 0: ['fireball'] } }, steps: [move('release'), move('fireball', (m, g) => foe(g, m.targetId, 'knight'))] },
@@ -58,6 +70,13 @@ export const SCENARIOS = [
   { id: 'rally', group: 'Spells', name: 'Rally', after: (g) => spent(g, 0, 'knight'), setup: { ...OPEN, hand: { 0: ['rally'] } }, steps: [move('cast', (m) => m.spell === 'rally')] },
   { id: 'kiss', group: 'Spells', name: 'Witch’s Kiss (from a discard pile)', setup: { ...OPEN, hand: { 0: ['kiss'] } }, steps: [move('cast', (m, g) => m.spell === 'kiss' && key(g, m.targetId) === 'fireball')] },
   { id: 'kiss-chain', group: 'Spells', name: 'Witch’s Kiss (from a Chain)', setup: { ...OPEN, hand: { 0: ['kiss'] }, chain: { 1: ['fireball', 'shadow'] } }, steps: [move('cast', (m, g) => m.spell === 'kiss' && key(g, m.targetId) === 'shadow')] },
+  // ---- the opponent's spells: what you see when they play them ----
+  { id: 'kiss-opp', group: 'Opponent spells', name: 'Their Kiss takes from your pile', turn: 1, setup: { ...OPEN, hand: { 1: ['kiss'] } }, steps: [move('cast', (m, g) => m.spell === 'kiss' && ours(g, m.targetId, 'fireball'))] },
+  { id: 'kiss-chain-opp', group: 'Opponent spells', name: 'Their Kiss takes from your Chain', turn: 1, setup: { ...OPEN, hand: { 1: ['kiss'] }, chain: { 0: ['fireball', 'shadow'] } }, steps: [move('cast', (m, g) => m.spell === 'kiss' && ours(g, m.targetId, 'shadow'))] },
+  { id: 'kiss-creature-opp', group: 'Opponent spells', name: 'Their Kiss takes a creature', turn: 1, setup: { ...OPEN, hand: { 1: ['kiss'] } }, steps: [move('cast', (m, g) => m.spell === 'kiss' && ours(g, m.targetId, 'knight'))] },
+  { id: 'shift-opp', group: 'Opponent spells', name: 'Their Shift takes your Guardian', turn: 1, setup: { ...OPEN, chain: { 1: ['shift'] } }, steps: [move('release'), doing('shift', (e) => e.t === 'shift')] },
+  { id: 'recall-opp', group: 'Opponent spells', name: 'Their Shift returns your spell', turn: 1, setup: { ...OPEN, chain: { 1: ['shift'], 0: ['fireball', 'behind'] } }, steps: [move('release'), doing('shift', (e) => e.t === 'recall')] },
+  { id: 'fireball-opp', group: 'Opponent spells', name: 'Their Fireball', turn: 1, setup: { ...OPEN, chain: { 1: ['fireball'] } }, steps: [move('release'), move('fireball', (m, g) => ours(g, m.targetId, 'knight'))] },
 ];
 
 /** The scenario's position: a dealt game with its cards set out, some tweaks, and whose turn it is. */

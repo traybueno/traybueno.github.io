@@ -66,7 +66,7 @@ function sequence(row, heart, kept) {
  * `order`: for each player, the ids of their row from left to right, as they last stood (where the player put each card). `gap`: { owner, index } holds a
  * place open at that position of the owner's row. The result's `rows` gives each player's row as it now stands: [{ id, x }] left to right, `x` as the owner sees it.
  */
-export function layout(view, viewer, { fan = null, order = null, gap = null } = {}) {
+export function layout(view, viewer, { gather = null, order = null, gap = null } = {}) {
   const cards = [], slots = [], numerals = [], rows = [[], []];
   for (const P of view.players) {
     const side = P.idx === viewer ? 1 : -1;
@@ -116,10 +116,7 @@ export function layout(view, viewer, { fan = null, order = null, gap = null } = 
 
     // The draw pile (backs) and the discard pile (faces, the last card on top), each a little untidy so it reads as a stack.
     P.deck.forEach((c, i) => cards.push(place(c, side, { zone: 'deck', top: i === P.deck.length - 1, depth: P.deck.length - 1 - i, ...at(-DECK.x + jitter(c.id, 'x') * 0.025, DECK.z + jitter(c.id, 'z') * 0.025), y: 0.04 + i * 0.04, spin: jitter(c.id, 's') * 0.008 })));
-    if (fan === P.idx) {                                              // a pile opened in place (Witch's Kiss): its cards spread across the middle, face up and upright for the viewer
-      const m = P.discard.length, st = Math.min(3.3, m > 1 ? 24 / (m - 1) : 3.3);
-      P.discard.forEach((c, i) => cards.push(place(c, side, { zone: 'discard', face: 1, x: (i - (m - 1) / 2) * st, z: 3.6, y: 1.6 + i * 0.05, yaw: 0, scale: 1 })));
-    } else P.discard.forEach((c, i) => cards.push(place(c, side, { zone: 'discard', top: i === P.discard.length - 1, depth: P.discard.length - 1 - i, ...at(-DISCARD.x + jitter(c.id, 'x') * 0.03, DISCARD.z + jitter(c.id, 'z') * 0.03), y: 0.04 + i * 0.04, spin: jitter(c.id, 's') * 0.012 })));
+    P.discard.forEach((c, i) => cards.push(place(c, side, { zone: 'discard', top: i === P.discard.length - 1, depth: P.discard.length - 1 - i, ...at(-DISCARD.x + jitter(c.id, 'x') * 0.03, DISCARD.z + jitter(c.id, 'z') * 0.03), y: 0.04 + i * 0.04, spin: jitter(c.id, 's') * 0.012 })));
 
     // The Chain: three numbered slots, nearest the middle of the table first. Slot I resolves first.
     for (let k = 0; k < 3; k++) {
@@ -130,7 +127,21 @@ export function layout(view, viewer, { fan = null, order = null, gap = null } = 
       if (c) cards.push(place(c, side, { zone: 'chain', ...s, y: 0.05, scale: CHAIN_SCALE }));
     }
   }
+  if (gather?.length) gathered(cards, gather);
   return { cards, slots, numerals, rows };
+}
+
+/**
+ * The cards a Witch's Kiss can take, brought up out of the piles and Chains they lie in and set out in one row, face up and raised over the near half of the
+ * table (just below the prompt on the middle line), so they can all be seen and one tapped. In the order given; a little more space between cards from
+ * different places (their Chain, their pile, your Chain, your pile). They keep their zone: only where they are drawn changes.
+ */
+function gathered(cards, ids) {
+  const at = new Map(cards.map((c, i) => [c.id, i])), row = ids.filter((id) => at.has(id)).map((id) => cards[at.get(id)]);
+  const group = (c) => `${c.owner}:${c.zone}`, GAP = 0.35, MAX = 26;
+  let w = 0; const xs = row.map((c, i) => (w += i ? (group(c) !== group(row[i - 1]) ? GAP : 0) + 1 : 0));
+  const step = Math.min(3.3, xs.length > 1 ? MAX / w : 3.3);
+  row.forEach((c, i) => { cards[at.get(c.id)] = { ...c, x: (xs[i] - w / 2) * step, z: 4.4, y: 1.6 + i * 0.05, yaw: 0, spin: 0, face: 1, scale: 1, dim: false, top: true, depth: 0 }; });
 }
 
 /** Where a card dropped with its centre at `x` (as its owner sees the table) goes in that owner's row: how many of the cards already there stand to its left. */

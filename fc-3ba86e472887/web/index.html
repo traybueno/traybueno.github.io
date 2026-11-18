@@ -1,8 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta name="robots" content="noindex,nofollow,noarchive">
-<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow,noarchive"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Field + Chain</title>
 <style>
@@ -13,7 +12,11 @@
   #table { display: block; width: 100vw; height: 100vh; touch-action: none; }
 
   /* The buttons: a stepped double frame like the board's, a diamond either side of the label, and a glint that sweeps across the frame on hover. */
-  .bar { position: fixed; right: max(22px, env(safe-area-inset-right)); top: max(16px, env(safe-area-inset-top)); display: flex; flex-direction: column; gap: 10px; align-items: stretch; z-index: 2; }
+  /* The action buttons stack in the black margin right of the table, just above its middle line (level with the reference card at the left), growing
+     upward; the Menu button sits just below the line in the same column, so it never moves. */
+  :root { --side-w: clamp(84px, calc(var(--table-left, 120px) - 18px), 150px); --side-r: max(6px, env(safe-area-inset-right), calc((var(--table-left, 120px) - var(--side-w)) / 2)); }
+  .bar { position: fixed; right: var(--side-r); bottom: calc(100vh - var(--table-mid, 50vh) + 8px); width: var(--side-w);
+         display: flex; flex-direction: column; gap: 10px; align-items: stretch; z-index: 2; }
   .btn { --step: polygon(12px 0, calc(100% - 12px) 0, calc(100% - 12px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 8px, 100% 8px, 100% calc(100% - 8px), calc(100% - 6px) calc(100% - 8px), calc(100% - 6px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 8px), 0 calc(100% - 8px), 0 8px, 6px 8px, 6px 4px, 12px 4px);
          position: relative; isolation: isolate; border: 0; min-height: 42px; padding: 11px 20px; display: inline-flex; align-items: center; justify-content: center; gap: 11px; cursor: pointer;
          color: var(--cream); font: 700 13px Georgia, "Times New Roman", serif; letter-spacing: .17em; text-transform: uppercase; text-shadow: 0 1px 0 #000;
@@ -33,6 +36,8 @@
   @property --g { syntax: '<number>'; inherits: false; initial-value: 0; }
   .bar .btn { --g: 0; min-width: 158px; color: color-mix(in srgb, #8dffb0 calc(var(--g) * 100%), var(--cream)); animation: valid 1.5s ease-in-out infinite; }
   .bar .btn:hover, .bar .btn:focus-visible { color: #fff; }
+  .bar .btn { min-width: 0; box-sizing: border-box; font-size: 11px; letter-spacing: .12em; padding: 11px 8px; filter: drop-shadow(0 0 6px rgba(255, 224, 138, .35)); }
+  .bar .btn.end { font-size: 12px; padding: 14px 8px; }
   @keyframes valid { 0%, 100% { --g: 0; } 50% { --g: .8; } }
   @media (prefers-reduced-motion: reduce) { .bar .btn { animation: none; --g: .35; } }
   .btn .sub { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; letter-spacing: .08em; text-transform: none; opacity: .7; }
@@ -53,7 +58,7 @@
   .pick { font-size: 18px; letter-spacing: .12em; text-transform: uppercase; color: #ffe08a; min-height: 1.4em; }
   .btn.sm { font-size: 12px; padding: 8px 14px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-  .tabbtn { position: fixed; left: max(18px, env(safe-area-inset-left)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 26px); z-index: 2; background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cream); opacity: .6; cursor: pointer; }
+  .tabbtn { position: fixed; left: max(18px, env(safe-area-inset-left)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 46px); z-index: 2; background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cream); opacity: .6; cursor: pointer; }
   .tabbtn:hover { opacity: 1; }
   .tabbtn[hidden] { display: none; }
   .hist { position: fixed; inset: 0; z-index: 8; background: rgba(0,0,0,.94); display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 28px 16px; overflow: auto; box-sizing: border-box; }
@@ -70,6 +75,99 @@
   .pimg img { width: 100%; height: 100%; display: block; }
   @media (max-width: 760px) { .preview { display: none; } }
 
+  /* The reference card: small at the left edge like a card in the hand, full size on hover, and the arrow turns it over. A black card with stepped
+     double frames in white and the cards' slab lettering; every size is a share of the card (cqw), so the small card is the big one shrunk. */
+  /* Small, it is centred in the margin between the screen's edge and the table's (--table-left and --table-mid come from the scene), as wide as the
+     margin allows; open, it grows from there to the right. While small it breathes a soft glow and carries a "Rules" tag, so it reads as something to open. */
+  .refcard { --rf-w: clamp(46px, calc(var(--table-left, 120px) - 20px), 92px); --rf-h: calc(var(--rf-w) * 1.5);
+             position: fixed; left: max(6px, env(safe-area-inset-left), calc((var(--table-left, 120px) - var(--rf-w)) / 2)); top: var(--table-mid, 50%); transform: translateY(-50%);
+             z-index: 2; outline: none; perspective: 1400px; cursor: pointer; }     /* under the big card preview (z-index 3) */
+  .refcard:not(.open) .rf-card { animation: rf-glow 3.2s ease-in-out infinite; transition: height .22s ease, transform .18s ease; }
+  .refcard:not(.open):hover .rf-card, .refcard:not(.open):focus-visible .rf-card { transform: translateY(-4px) rotate(-2deg); animation: none; filter: drop-shadow(0 0 9px rgba(255, 255, 255, .7)); }
+  @keyframes rf-glow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 255, 255, .15)); } 50% { filter: drop-shadow(0 0 10px rgba(255, 255, 255, .55)); } }
+  .rf-tag { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); font: 700 11px 'Roboto Slab', Georgia, serif; letter-spacing: .22em; text-transform: uppercase; color: #fff; opacity: .75; white-space: nowrap; pointer-events: none; transition: opacity .15s; text-shadow: 0 0 6px #000; }
+  .refcard:hover .rf-tag { opacity: 1; }
+  .refcard.open .rf-tag { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .refcard:not(.open) .rf-card { animation: none; filter: drop-shadow(0 0 6px rgba(255, 255, 255, .4)); } }
+  .refcard.open { --rf-h: min(76vh, 600px); cursor: default; }
+  .rf-card { height: var(--rf-h); aspect-ratio: 2 / 3; container-type: size; transition: height .22s ease; }
+  .rf-flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .5s cubic-bezier(.4, .1, .2, 1); }
+  .rf-flip.over { transform: rotateY(180deg); }
+  .rf-frame { --s: .9cqw; position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: #fff; padding: .7cqw;
+              clip-path: polygon(calc(var(--s) * 2) 0, calc(100% - var(--s) * 2) 0, calc(100% - var(--s) * 2) var(--s), calc(100% - var(--s)) var(--s), calc(100% - var(--s)) calc(var(--s) * 2), 100% calc(var(--s) * 2), 100% calc(100% - var(--s) * 2), calc(100% - var(--s)) calc(100% - var(--s) * 2), calc(100% - var(--s)) calc(100% - var(--s)), calc(100% - var(--s) * 2) calc(100% - var(--s)), calc(100% - var(--s) * 2) 100%, calc(var(--s) * 2) 100%, calc(var(--s) * 2) calc(100% - var(--s)), var(--s) calc(100% - var(--s)), var(--s) calc(100% - var(--s) * 2), 0 calc(100% - var(--s) * 2), 0 calc(var(--s) * 2), var(--s) calc(var(--s) * 2), var(--s) var(--s), calc(var(--s) * 2) var(--s)); }
+  .rf-back { transform: rotateY(180deg); }
+  .rf-face { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; gap: 1.8cqw; padding: 3.2cqw; background: #000; clip-path: inherit; color: #fff; font-family: 'Roboto Slab', Georgia, serif; }
+  .rf-box, .rf-b, .rf-c, .rf-d { --s: .9cqw; box-sizing: border-box; clip-path: polygon(calc(var(--s) * 2) 0, calc(100% - var(--s) * 2) 0, calc(100% - var(--s) * 2) var(--s), calc(100% - var(--s)) var(--s), calc(100% - var(--s)) calc(var(--s) * 2), 100% calc(var(--s) * 2), 100% calc(100% - var(--s) * 2), calc(100% - var(--s)) calc(100% - var(--s) * 2), calc(100% - var(--s)) calc(100% - var(--s)), calc(100% - var(--s) * 2) calc(100% - var(--s)), calc(100% - var(--s) * 2) 100%, calc(var(--s) * 2) 100%, calc(var(--s) * 2) calc(100% - var(--s)), var(--s) calc(100% - var(--s)), var(--s) calc(100% - var(--s) * 2), 0 calc(100% - var(--s) * 2), 0 calc(var(--s) * 2), var(--s) calc(var(--s) * 2), var(--s) var(--s), calc(var(--s) * 2) var(--s)); }
+  .rf-box { background: #fff; padding: .7cqw; }
+  .rf-b { height: 100%; background: #000; padding: 1.1cqw; }
+  .rf-c { height: 100%; background: #fff; padding: .7cqw; }
+  .rf-d { height: 100%; background: #000; display: flex; align-items: center; justify-content: center; text-align: center; }
+  .rf-title .rf-d { height: 13cqw; font-weight: 700; font-size: 6.6cqw; letter-spacing: .06em; }
+  .rf-body { flex: 1; min-height: 0; }
+  /* The words of each side are sized as shares of the card times --k, which the card lowers until a side fits its box. */
+  .rf-fit { --u: calc(var(--k, 1) * 1cqw); width: 100%; box-sizing: border-box; padding: calc(var(--u) * 2.2) calc(var(--u) * 2.6); display: flex; flex-direction: column; gap: calc(var(--u) * 2.6); text-align: left; }
+  .refcard { --rc-field: #bbdf7f; --rc-chain: #fa5154; --rc-inst: #d6956a; --rc-guard: #9ed2ec; --rc-heart: #f891b9; --rc-dev: #d39bec; --rc-gold: #fade69; }
+  .rc-ico { height: calc(var(--u) * var(--h) * .62); width: auto; flex: none; fill: #fff; }
+  .rf-fit p { margin: 0; font-weight: 500; font-size: calc(var(--u) * 3.6); line-height: 1.3; letter-spacing: .02em; }
+  .rf-fit b { font-weight: 700; }
+  .rf-note { font-size: calc(var(--u) * 3); line-height: 1.3; text-align: center; color: rgba(255, 255, 255, .62); letter-spacing: .02em; }
+
+  /* Your Turn: a timeline down the left (a stepped diamond per step on a thin line), the two actions side by side, and Instants as a band down the right. */
+  .rt-grid { display: grid; grid-template-columns: 1fr calc(var(--u) * 9); gap: calc(var(--u) * 2); }
+  .rt-line { position: relative; display: flex; flex-direction: column; gap: calc(var(--u) * 3.4); }
+  .rt-line::before { content: ""; position: absolute; left: calc(var(--u) * 1.6 - 1px); top: calc(var(--u) * 3); bottom: calc(var(--u) * 3); border-left: 2px dotted rgba(255, 255, 255, .45); }
+  .rt-step { position: relative; display: grid; grid-template-columns: calc(var(--u) * 3.2) 1fr; gap: calc(var(--u) * 2); align-items: start; }
+  .rt-node { width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); margin: calc(var(--u) * 1.5) 0 0 calc(var(--u) * .5); background: #fff; transform: rotate(45deg); box-shadow: 0 0 0 calc(var(--u) * .8) #000; }
+  .rt-actions .rt-node { background: var(--rc-gold); }
+  .rt-head { display: flex; align-items: center; gap: calc(var(--u) * 1.6); font-weight: 700; font-size: calc(var(--u) * 4.4); letter-spacing: .08em; text-transform: uppercase; line-height: 1.2; }
+  .rt-sub { margin-top: calc(var(--u) * .8); font-size: calc(var(--u) * 3.1); line-height: 1.3; color: rgba(255, 255, 255, .7); }
+  .rt-actions .rt-sub { text-align: center; color: var(--rc-gold); }
+  .rt-pair { display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: calc(var(--u) * 1.2); }
+  .rt-amp { align-self: center; font-weight: 700; font-size: calc(var(--u) * 5); color: var(--rc-gold); }
+  .rt-act { border: calc(var(--u) * .55) solid var(--c); padding: calc(var(--u) * 1.6) calc(var(--u) * 1.8); }
+  .rt-act.rt-field { --c: var(--rc-field); } .rt-act.rt-chain { --c: var(--rc-chain); }
+  .rt-act .rt-head { color: var(--c); font-size: calc(var(--u) * 3.9); padding-bottom: calc(var(--u) * 1.2); margin-bottom: calc(var(--u) * 1.2); border-bottom: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
+  .rt-act ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--u) * 1.4); }
+  .rt-act li { position: relative; padding-left: calc(var(--u) * 2.4); font-size: calc(var(--u) * 3.3); line-height: 1.22; }
+  .rt-act li::before { content: ""; position: absolute; left: 0; top: calc(var(--u) * 1.3); width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1); background: var(--c); transform: rotate(45deg); }
+  .rt-act li small { display: block; font-size: calc(var(--u) * 2.7); color: rgba(255, 255, 255, .62); line-height: 1.25; }
+  .rt-band { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 2); padding: calc(var(--u) * 2) 0; border: calc(var(--u) * .55) solid var(--rc-inst); color: var(--rc-inst); }
+  .rt-band .rc-ico { fill: var(--rc-inst); }
+  .rt-bandtext { writing-mode: vertical-rl; display: flex; gap: calc(var(--u) * 1.6); align-items: center; font-size: calc(var(--u) * 3.2); letter-spacing: .06em; }
+  .rt-bandtext b { text-transform: uppercase; letter-spacing: .12em; font-size: calc(var(--u) * 3.6); }
+
+  /* The Cards: the life of a card (ready, spent, defeated, each hit an arrow), one rule a row with its icon, and the Heart as the goal. */
+  .rc-life { display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); }
+  .rc-track { display: flex; align-items: flex-end; justify-content: center; gap: calc(var(--u) * 1.2); }
+  .rc-state { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 1.2); }
+  .rc-state b { font-size: calc(var(--u) * 3.2); letter-spacing: .1em; text-transform: uppercase; }
+  .rc-mini { position: relative; display: block; box-sizing: border-box; width: calc(var(--u) * 7); height: calc(var(--u) * 10.5); border: calc(var(--u) * .6) solid #fff; }
+  .rc-s1 .rc-mini { width: calc(var(--u) * 10.5); height: calc(var(--u) * 7); margin-top: calc(var(--u) * 3.5); }
+  .rc-s2 .rc-mini { border-style: dashed; border-color: rgba(255, 255, 255, .45); }
+  .rc-s2 .rc-mini::before, .rc-s2 .rc-mini::after { content: ""; position: absolute; left: 50%; top: 50%; width: 130%; height: calc(var(--u) * .7); background: var(--rc-chain); transform: translate(-50%, -50%) rotate(56deg); }
+  .rc-s2 .rc-mini::after { transform: translate(-50%, -50%) rotate(-56deg); }
+  .rc-s2 b { color: rgba(255, 255, 255, .6); }
+  .rc-hit { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .6); margin-bottom: calc(var(--u) * 7.5); color: var(--rc-chain); font-size: calc(var(--u) * 2.9); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .rc-hit i { display: block; width: calc(var(--u) * 7); height: calc(var(--u) * .6); background: var(--rc-chain); position: relative; }
+  .rc-hit i::after { content: ""; position: absolute; right: calc(var(--u) * -.4); top: 50%; width: calc(var(--u) * 1.8); height: calc(var(--u) * 1.8); border: solid var(--rc-chain); border-width: calc(var(--u) * .6) calc(var(--u) * .6) 0 0; transform: translateY(-50%) rotate(45deg); box-sizing: border-box; }
+  .rc-rows { display: flex; flex-direction: column; }
+  .rc-row { display: grid; grid-template-columns: calc(var(--u) * 6) 1fr; gap: calc(var(--u) * 2); align-items: center; padding: calc(var(--u) * 1.7) 0; border-top: 1px dotted rgba(255, 255, 255, .28); }
+  .rc-row:first-child { border-top: 0; }
+  .rc-row .rc-ico { justify-self: center; height: calc(var(--u) * var(--h) * .6); max-width: calc(var(--u) * 6); }
+  .rc-goal { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 2.2); padding: calc(var(--u) * 1.8); border: calc(var(--u) * .55) solid var(--rc-heart); }
+  .rc-goal p { font-weight: 700; font-size: calc(var(--u) * 3.9); letter-spacing: .04em; }
+  .rc-goal .rc-ico { height: calc(var(--u) * 4.4); }
+  .rf-foot .rf-d { height: 11cqw; }
+  .rf-turn { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: none; border: 0; padding: 0; cursor: pointer; }
+  .rf-turn svg { height: 6cqw !important; fill: #fff !important; fill: #fff; transition: transform .2s, filter .2s; }
+  .rf-turn:hover svg, .rf-turn:focus-visible svg { transform: scale(1.18); filter: drop-shadow(0 0 1.5cqw rgba(255, 255, 255, .8)); }
+  .rf-turn:focus-visible { outline: none; }
+  .rf-back .rf-turn svg { transform: scaleX(-1); }
+  .rf-back .rf-turn:hover svg, .rf-back .rf-turn:focus-visible svg { transform: scaleX(-1) scale(1.18); }
+  .refcard:not(.open) .rf-turn { pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { .rf-card, .rf-flip { transition: none; } }
+  @media (max-width: 760px) { .refcard { --rf-w: 52px; left: max(10px, env(safe-area-inset-left)); top: auto; bottom: 72px; transform: none; } .refcard.open { --rf-h: min(80vh, calc((100vw - 36px) * 1.5)); } }
+
   .marks { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; }
 
   .anim { position: fixed; left: max(18px, env(safe-area-inset-left)); top: 96px; bottom: 56px; width: 214px; z-index: 3; overflow-y: auto; scrollbar-width: thin; }
@@ -79,18 +177,106 @@
   .anim button:hover { background: rgba(236,226,189,.14); color: #fff; }
   .anim button.on { border-left-color: #ffe08a; color: #fff; background: rgba(236,226,189,.18); }
   .anim button.back { margin-top: 18px; opacity: .6; }
-  .speed { position: fixed; left: max(18px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 2; background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cream); opacity: .4; cursor: pointer; }
-  .speed:hover { opacity: .9; }
   .hint { position: fixed; top: max(16px, env(safe-area-inset-top)); left: max(22px, env(safe-area-inset-left)); z-index: 3; max-width: min(32vw, 400px); text-align: left; line-height: 1.35; font-size: 15px; letter-spacing: .04em; opacity: 0; transition: opacity .25s; pointer-events: none; text-shadow: 0 0 6px #000; }
+  /* What to tap next, during an exchange: a banner across the table's middle line, where the eye already is, framed like the buttons. */
+  .hint.prompt { top: var(--table-mid, 50%); left: 50%; transform: translate(-50%, -50%); max-width: min(calc(100vw - 2 * var(--table-left, 40px) - 56px), 76vw, 640px); text-align: center; font-size: 19px; line-height: 1.3; padding: 10px 22px; color: #fff8dc; background: rgba(6, 5, 8, .92); border: 1px solid rgba(236, 226, 189, .6); box-shadow: 0 0 0 3px rgba(6, 5, 8, .92), 0 6px 24px rgba(0, 0, 0, .7); }
 
   .cover, .over { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
   .cover { background: #000; z-index: 5; cursor: pointer; }
-  .over { z-index: 4; background: rgba(0,0,0,.55); cursor: pointer; }
+  .over { z-index: 4; background: rgba(0,0,0,.55); }
+  .over .row { margin-top: 22px; }
   .cover[hidden], .over[hidden] { display: none; }
   .k { font-size: 15px; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
   .who { font-size: 44px; letter-spacing: .08em; }
   .tap { font-size: 14px; letter-spacing: .2em; text-transform: uppercase; opacity: .6; margin-top: 18px; animation: breathe 2.4s ease-in-out infinite; }
   @keyframes breathe { 50% { opacity: .25; } }
+  /* The title screen: the card back's chains drifting faintly behind, the board's stepped double frame round the screen, the name, a fan of cards like a
+     hand, the opponent picker and Start game. Calm: one drift, one sway; still under reduced motion. */
+  .title-screen { gap: 0; overflow: hidden; }
+  .tchains { position: absolute; inset: -12%; background: 0 0 / 560px auto repeat; image-rendering: pixelated; opacity: 0; transition: opacity 1.8s ease;
+             -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 46%, transparent 25%, #000 85%); mask-image: radial-gradient(ellipse 60% 55% at 50% 46%, transparent 25%, #000 85%);
+             animation: t-drift 60s linear infinite alternate; pointer-events: none; }
+  .tchains.on { opacity: .16; }
+  @keyframes t-drift { from { transform: translate(-3%, 3%); } to { transform: translate(3%, -3%); } }
+  .tframe { position: absolute; inset: 0; pointer-events: none; }
+  .tframe > svg:not(.orn) { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: var(--cream); stroke-width: 1.5; }
+  .orn { width: 30px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; flex: none; }
+  .tframe .orn.top { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 36px; height: 24px; padding: 0 12px; color: var(--cream); background: #000; }
+  .tbody { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2.6vh, 26px); padding: 48px 16px 40px; }
+  .tname { margin: 0; font: 700 clamp(32px, 6.2vw, 84px)/1 'Roboto Slab', Georgia, serif; color: var(--cream); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+  .tword { display: inline-flex; align-items: center; gap: .34em; transform: scaleX(1.22); }
+  .tname .orn.plus { width: .6em; height: .4em; stroke-width: 2.2; color: #d9a441; }
+  .tfan { --ch: clamp(150px, 31vh, 300px); position: relative; width: calc(var(--ch) * 2.6); height: calc(var(--ch) * 1.14); rotate: 0deg; transform-origin: 50% 200%;
+          animation: t-sway 11s ease-in-out infinite alternate; }
+  @keyframes t-sway { from { rotate: -.9deg; } to { rotate: .9deg; } }
+  .tcard { position: absolute; left: 50%; bottom: 0; height: var(--ch); aspect-ratio: 2 / 3; margin-left: calc(var(--ch) / -3); transform-origin: 50% 230%;
+           transform: rotate(calc(var(--d) * 11deg)); z-index: calc(10 - var(--d) * var(--d)); animation: t-deal .7s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc((var(--d) + 2) * 80ms + 150ms); }
+  .tcard.mid { translate: 0 -5%; }
+  @keyframes t-deal { from { opacity: 0; translate: 0 40%; } }
+  .tcard img { display: block; width: 100%; height: 100%; filter: drop-shadow(0 12px 18px rgba(0, 0, 0, .85)); transition: transform .18s ease; }
+  .tcard:hover img { transform: translateY(-7%) scale(1.04); }
+  .tpick { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tpick .k { margin: 0; font-size: 12px; }
+  .sel { display: flex; align-items: center; gap: 10px; }
+  .sel .arr { background: none; border: 0; padding: 6px 12px; font: inherit; font-size: 26px; line-height: 1; color: var(--cream); opacity: .55; cursor: pointer; transition: opacity .15s, color .15s, transform .1s; }
+  .sel .arr:hover, .sel .arr:focus-visible { opacity: 1; color: #ffe08a; outline: none; }
+  .sel .arr:active { transform: scale(.88); }
+  .sel .val { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .sel .nm { font: 700 22px 'Roboto Slab', Georgia, serif; letter-spacing: .22em; text-transform: uppercase; color: #fff; }
+  .sel .sub { margin-top: 5px; font-size: 13px; line-height: 1.35; letter-spacing: .03em; opacity: .62; }
+  .sel.opp .val { width: min(330px, 62vw); min-height: 3.7em; }
+  .sel.small .arr { font-size: 18px; padding: 6px 8px; }
+  .sel.small { gap: 2px; }
+  .sel.small .val { width: 86px; }
+  .sel.small .nm { font-size: 13px; letter-spacing: .16em; }
+  .btn.go { --g: 0; min-width: 236px; font-size: 15px; padding: 14px 28px; color: color-mix(in srgb, #8dffb0 calc(var(--g) * 100%), var(--cream)); animation: valid 1.5s ease-in-out infinite; }
+  .btn.go:hover, .btn.go:focus-visible { color: #fff; }
+  .tlinks { display: flex; align-items: center; gap: 12px; }
+  .tlinks .dot { font-size: 7px; color: #d9a441; }
+  .tlinks .plink.learn { opacity: .9; color: #fff8dc; }
+  /* Learn to play: the lesson's name and goal at the top middle of the table, and what it taught when it is complete. */
+  .lesson { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 2; max-width: min(46vw, 560px); text-align: center; pointer-events: none; text-shadow: 0 0 6px #000; }
+  .lesson[hidden] { display: none; }
+  .lesson .lk { font: 700 12px 'Roboto Slab', Georgia, serif; letter-spacing: .22em; text-transform: uppercase; color: #d9a441; }
+  .lesson .lg { margin-top: 5px; font-size: 15px; line-height: 1.35; letter-spacing: .03em; }
+  @media (max-width: 760px) { .lesson { max-width: 60vw; } .lesson .lg { font-size: 13px; } }
+  .over .ltext { max-width: min(80vw, 560px); margin-top: 14px; text-align: center; font-size: 17px; line-height: 1.45; letter-spacing: .03em; }
+  .plink { background: none; border: 0; padding: 6px 4px; font: inherit; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--cream); opacity: .55; cursor: pointer; }
+  .plink:hover, .plink:focus-visible { opacity: 1; outline: none; }
+  @media (max-width: 600px) {
+    .tframe .orn.top { top: -2px; }
+    .tfan { --ch: clamp(120px, 26vh, 210px); width: calc(var(--ch) * 1.7); }
+    .tcard:first-child, .tcard:last-child { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .tchains, .tfan, .tcard, .btn.go { animation: none; } .btn.go { --g: .35; } }
+
+  /* The one corner control during play, and the panels it opens (pause menu, settings, developer tools, yes/no): a stepped double frame like the buttons. */
+  .menubtn { position: fixed; right: var(--side-r); top: calc(var(--table-mid, 50vh) + 8px); width: var(--side-w); box-sizing: border-box; z-index: 2; opacity: .8; transition: opacity .15s, background-position .55s ease, color .15s, transform .1s; }
+  .menubtn:hover, .menubtn:focus-visible { opacity: 1; }
+  .menubtn.btn { gap: 7px; min-height: 36px; padding: 8px 6px; font-size: 11px; letter-spacing: .14em; }
+  .layer { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: rgba(0, 0, 0, .74); animation: p-fade .15s ease; }
+  .layer[hidden] { display: none; }
+  @keyframes p-fade { from { opacity: 0; } }
+  .panel { --step: polygon(14px 0, calc(100% - 14px) 0, calc(100% - 14px) 7px, calc(100% - 7px) 7px, calc(100% - 7px) 14px, 100% 14px, 100% calc(100% - 14px), calc(100% - 7px) calc(100% - 14px), calc(100% - 7px) calc(100% - 7px), calc(100% - 14px) calc(100% - 7px), calc(100% - 14px) 100%, 14px 100%, 14px calc(100% - 7px), 7px calc(100% - 7px), 7px calc(100% - 14px), 0 calc(100% - 14px), 0 14px, 7px 14px, 7px 7px, 14px 7px);
+           width: min(380px, 100%); padding: 2px; box-sizing: border-box; background: var(--cream); clip-path: var(--step); animation: p-pop .16s ease-out; }
+  @keyframes p-pop { from { transform: translateY(6px); opacity: 0; } }
+  .pin { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 28px 26px 22px; background: #060508; clip-path: var(--step); }
+  .pin::after { content: ""; position: absolute; inset: 6px; border: 1px solid rgba(236, 226, 189, .35); clip-path: var(--step); pointer-events: none; }
+  .phead { display: flex; align-items: center; justify-content: center; gap: 12px; text-align: center; font: 700 16px 'Roboto Slab', Georgia, serif; letter-spacing: .22em; text-transform: uppercase; color: #fff; }
+  .phead .orn { width: 21px; height: 14px; color: #d9a441; }
+  .pcol { display: flex; flex-direction: column; gap: 10px; }
+  .pcol .btn, .prow2 .btn { display: flex; width: 100%; }
+  .prows { display: flex; flex-direction: column; }
+  .prow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px dotted rgba(236, 226, 189, .25); }
+  .prow:first-child { border-top: 0; }
+  .plabel { font-size: 13px; letter-spacing: .2em; text-transform: uppercase; }
+  .pnote { font-size: 12px; opacity: .5; text-align: center; }
+  .prow2 { display: flex; gap: 10px; }
+  .panel .plink { align-self: center; }
+  @media (prefers-reduced-motion: reduce) { .layer, .panel { animation: none; } }
+  /* The dark beat between Start game and the deal (ui.js times it): in quickly, held, then lifted slowly off the table. */
+  .veil { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; transition: opacity .9s ease-out; }
+  .veil.in { opacity: 1; pointer-events: auto; transition: opacity .55s ease-in; }
 </style>
 <script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js" } }</script>
 </head>

@@ -15,10 +15,16 @@ import { handSpot, deckSpot } from './layout.js';
 const mix = (a, b, u) => { const o = { ...b }; for (const k of ['x', 'y', 'z', 'spin', 'scale', 'face']) o[k] = (a[k] ?? 0) + ((b[k] ?? 0) - (a[k] ?? 0)) * u; return o; };
 const moved = (a, b) => ['x', 'y', 'z', 'spin', 'face'].some((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) > 0.05) || !!a.dim !== !!b.dim;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
-const SHOW = (side) => ({ x: 0, y: 2.6, z: side * 2.2, yaw: 0, spin: 0, scale: 1.2, face: 1, dim: false });     // where a spell is held up while it takes effect
+const THEIRS = 1.6;          // how much slower the opponent's moves play than your own
+const READ = 0.35;           // a spell that is not yours, or that moves another card, waits this long once it is held up, so its name can be read first
+const HOLD = 0.85;           // how long the card a Kiss or a Shift takes is held up beside the spell before it goes
+const LAND = 0.38;           // how long after a card sets off from the hand it has come down in its place
+/** A rough stand-in for a device's colour where the art is not loaded (the tests); on the table the colour is read from the card's own frame. */
+const TINT = { portal: '#c99be8', lantern: '#c8f08c', resolve: '#ffe066' };
+const SHOW = (side) => ({ x: 0, y: side > 0 ? 1.8 : 2.6, z: side > 0 ? 5.2 : -2.2, yaw: 0, spin: 0, scale: 1.2, face: 1, dim: false });     // where a spell is held up while it takes effect (yours a little nearer you, clear of the banner on the middle line)
 
 export class Fx {
-  constructor(scene) { this.sc = scene; this.now = 0; this.jobs = []; this.held = new Set(); this.k = 1; this.end = 0; }
+  constructor(scene) { this.sc = scene; this.now = 0; this.jobs = []; this.held = new Set(); this.touched = new Set(); this.k = 1; this.end = 0; }
   /** 1 normal, 0.55 fast, 0 off. */
   set speed(k) { this.k = k; }
   get busy() { return this.end > this.now; }
@@ -42,6 +48,7 @@ export class Fx {
   /** Finish everything at once: no card is held, none is half turned over, and the camera is back. */
   flush() {
     for (const c of this.held) this.free(c);
+    for (const c of this.touched) c.calm(); this.touched.clear();
     this.held.clear(); this.jobs = []; this.end = this.now; this.sc.haloHold.clear(); this.sc.lean(0, 0, 0);
   }
   free(c) { c.held = null; c.flat.scale.x = 1; if (c.faceOverride !== undefined) { c.faceOverride = undefined; c.show(c.base?.key ?? null); } }
@@ -81,13 +88,91 @@ export class Fx {
       const ti = t + 0.1 + i * 0.12, p = spots[i], last = i === ids.length - 1;
       this.path(id, [[0, 'live'], [ti - 0.05, { ...p, y: p.y + 1.5, scale: p.scale * 1.16, face: 0 }, SPRING.follow], [ti + 0.24, null]]);      // it leaps up as the charge reaches it, then settles back
       if (i) this.at(ti - 0.07, () => ov.beam(at(spots[i - 1], 1.4), at(p, 1.4), { dur: 0.14, color: '#ffd27a' }));
-      this.glow(id, ti); this.ring({ card: id }, ti, { grow: 0.2, dur: 0.4 }); this.ring({ card: id }, ti + 0.08, { grow: 0.42, dur: 0.5, alpha: 0.5 });
+      this.glow(id, ti); this.ring({ card: id }, ti, { grow: 0.2, dur: 0.4 }); this.sound(last ? 'clash' : 'tick', ti, p, { step: i * 3 }); this.ring({ card: id }, ti + 0.08, { grow: 0.42, dur: 0.5, alpha: 0.5 });
       this.at(ti, () => { ov.shock(p.x, p.z, { r: last ? 7 : 4.5, dur: last ? 0.55 : 0.4, width: last ? 3.4 : 2.4 }); sc.nudge(-toward * (last ? 0.18 : 0.06), last ? 0.4 : 0.14); });
     });
     return t + 0.1 + (ids.length - 1) * 0.12 + 0.3;
   }
   ring(spec, t, o) { this.at(t, () => this.sc.overlay.ring(spec, o)); }
+  /** From `t`, card `id` plays the 'place' sound at the moment it comes to rest on the table (card.js watches for it), not at a set time. */
+  landing(id, t, { gain = 1 } = {}) {
+    this.at(t, () => {
+      const c = this.sc.cards.get(id); if (!c) return;
+      c.landing = { until: performance.now() + 1200, fn: () => this.sc.sound?.play('place', { pan: c.s.x.x / 20, gain: gain * (c.s.z.x < -1 ? 0.8 : 1) }) };
+    });
+  }
+  /** A card sound (sound.js) at `t`, placed left or right by where `pose` is on the table; the far side is a little quieter. */
+  sound(name, t, pose, { gain = 1, step = 0 } = {}) {
+    this.at(t, () => this.sc.sound?.play(name, { pan: (pose?.x ?? 0) / 20, gain: gain * ((pose?.z ?? 0) < -1 ? 0.8 : 1), step }));
+  }
   glow(id, t) { this.at(t, () => this.sc.flash(id)); }
+
+  // ---- the devices' moments: a Warp Portal, a Lantern Keeper and a Heaven's Resolve each touch several cards, in the colour of their own frames -----
+  /** The colour of a card's frame, from its art. */
+  tint(key) { const e = this.sc.cards.values().next().value?.art?.edge?.[key]; return e ? `#${e.getHexString()}` : TINT[key] ?? '#ffffff'; }
+  /** Over `dur` seconds from `t`, `fn(card, u)` shapes card `id` (its veil, how solid it is, its tilt, how lit it is); at the end it is plain again. */
+  touch(id, t, dur, fn) {
+    this.tween(t, dur, (u) => { const c = this.sc.cards.get(id); if (!c?.setVeil) return; this.touched.add(c); if (u >= 1) { c.calm(); this.touched.delete(c); } else fn(c, u); });
+  }
+  /** Card `id` rises a little at `t` and settles again. */
+  bob(id, t, p, y = 0.5) { if (p) this.path(id, [[t, { ...p, y: p.y + y, scale: p.scale * 1.04 }, SPRING.follow], [t + 0.22, null]]); }
+  /** A card the Warp Portal overcomes for a moment: purple pixels swirl over it, it goes see-through, and they drain away. `tip` makes it ripple up as they come. */
+  ghost(id, t, color, { dur = 0.95, depth = 0.65, tip = 0.35 } = {}) {
+    this.touch(id, t, dur, (c, u) => {
+      const flood = Math.min(1, u / 0.3), drain = u < 0.6 ? 0 : (u - 0.6) / 0.4, see = Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.15) / 0.7)));
+      c.tilt = tip * Math.sin(Math.PI * Math.min(1, u / 0.5)); c.fade = 1 - depth * see;
+      c.setVeil({ color, shape: 1, amount: flood * (1 - drain), alpha: 0.95 - 0.4 * see, spin: u * 1.5 + drain * 2 });
+    });
+  }
+  /** A Warp Portal comes in: a swirl turns round it, and a wave runs through the enemy Guardians (`ids`), nearest first, each overcome as it crests. */
+  portal(pid, ids, t, live) {
+    const color = this.tint('portal'), o = live(pid);
+    this.at(t, () => this.sc.overlay.pixel?.('swirl', o.x, o.z, { color, r: 2.4, dur: 1.0 }));
+    this.touch(pid, t, 0.7, (c, u) => c.setVeil({ color, shape: 1, amount: 0.5 * Math.sin(Math.PI * u), alpha: 0.85, spin: -2 * u }));
+    [...ids].filter((id) => live(id)).sort((a, b) => dist(live(a), o) - dist(live(b), o)).forEach((id, i) => {
+      const ti = t + 0.25 + i * 0.12;
+      this.bob(id, ti, live(id), 0.6); this.ghost(id, ti, color); this.sound('tick', ti, live(id), { step: i * 2, gain: 0.6 });
+    });
+  }
+  /** A Lantern Keeper's dotted glow spreads across the table from it, `r` far; the Keeper itself lights up from its edges. */
+  lamp(lid, t, live, r) {
+    const color = this.tint('lantern'), o = live(lid); if (!o) return;
+    this.at(t, () => this.sc.overlay.pixel?.('dots', o.x, o.z, { color, r, dur: 0.8 }));
+    this.touch(lid, t, 0.6, (c, u) => c.setVeil({ color, shape: 2, amount: 0.5 * Math.sin(Math.PI * u), alpha: 0.85 }));
+  }
+  /** The light comes on (from Keeper `lid`, glowing from `t`) over spent creatures `ids`: as the glow reaches each, it fills in green from the edges, brightens, and stands a little taller. */
+  lightOn(lid, ids, t, live) {
+    const color = this.tint('lantern'), o = live(lid) ?? live(ids[0]), far = Math.max(0, ...ids.map((id) => (live(id) ? dist(live(id), o) : 0))), r = Math.min(16, Math.max(4, far + 1.5));
+    this.lamp(lid, t, live, r);
+    ids.forEach((id, i) => {
+      const p = live(id); if (!p) return;
+      const ti = t + 0.8 * (1 - Math.cbrt(Math.max(0, 1 - dist(p, o) / r)));        // when the spreading glow (eased like the overlay's) reaches it
+      this.bob(id, ti, p, 0.35); this.sound('tick', ti, p, { step: 4 + i * 2, gain: 0.5 });
+      this.touch(id, ti, 0.7, (c, u) => { c.bright = Math.sin(Math.PI * u); c.setVeil({ color, shape: 2, amount: u < 0.35 ? 0.55 * u / 0.35 : 0.55 * (1 - (u - 0.35) / 0.65), alpha: 0.9 }); });
+    });
+  }
+  /** The light goes out over `ids`: the green flickers and gutters, and embers fall. */
+  lightOff(ids, t, live) {
+    const color = this.tint('lantern');
+    ids.forEach((id, i) => {
+      const p = live(id); if (!p) return;
+      this.at(t + i * 0.06, () => this.sc.overlay.pixel?.('embers', p.x, p.z, { color, dur: 0.8 }));
+      this.touch(id, t + i * 0.06, 0.7, (c, u) => { const f = Math.sin(u * 42) > -0.2 ? 1 : 0.25; c.bright = 0.5 * (1 - u) * f; c.setVeil({ color, shape: 2, amount: 0.5 * (1 - u) * f, alpha: 0.85 }); });
+    });
+  }
+  /** Heaven's Resolve's light falls on card `id`: a beam comes down on it, gold pixels rise through it, and it straightens. */
+  bless(id, t, p, { wide = 0.6, i = 0 } = {}) {
+    const color = this.tint('resolve'); if (!p) return;
+    this.at(t, () => this.sc.overlay.pixel?.('shaft', p.x, p.z, { color, wide, r: 2, dur: 0.75 }));
+    this.touch(id, t + 0.12, 0.6, (c, u) => { c.bright = 0.6 * Math.sin(Math.PI * u); c.tilt = -0.18 * Math.sin(Math.PI * u); c.setVeil({ color, shape: 3, amount: u, alpha: 0.9 }); });
+    this.bob(id, t + 0.12, p, 0.4); this.sound('tick', t + 0.12, p, { step: 6 + i * 2, gain: 0.55 });
+  }
+  /** A Heaven's Resolve comes in: a broad beam falls on it, then on each of your attackers (`ids`) in turn, nearest first. */
+  resolve(rid, ids, t, live) {
+    const o = live(rid); if (!o) return;
+    this.bless(rid, t, o, { wide: 1.2 });
+    [...ids].filter((id) => live(id)).sort((a, b) => dist(live(a), o) - dist(live(b), o)).forEach((id, i) => this.bless(id, t + 0.35 + i * 0.14, live(id), { i }));
+  }
 
   // ---- the plan --------------------------------------------------------------------------------------------------------------------------------
   /**
@@ -95,6 +180,12 @@ export class Fx {
    * placement. Returns the poses that cards new to the table start from (a drawn card starts at its pile, an opponent's played card at their hand).
    */
   plan(events, prev, next, view, viewer) {
+    // The opponent's moves play slower than your own: you know what you did, not what they did. (Who moved: the first event that says, or the owner of its card.)
+    const first = events.find((e) => e.t !== 'draw' && e.t !== 'turn'), mover = first && (first.p ?? (prev.get(first.id) ?? next.get(first.id))?.owner);
+    const k = this.k; if (mover !== undefined && mover !== viewer) this.k = k * THEIRS;
+    try { return this.planned(events, prev, next, view, viewer); } finally { this.k = k; }
+  }
+  planned(events, prev, next, view, viewer) {
     const spawn = new Map(), sc = this.sc, side = (o) => (o === viewer ? 1 : -1);
     if (!this.k || !events.length) return spawn;
     const live = (id) => { const c = sc.cards.get(id); return c ? c.livePose() : spawn.get(id) ?? prev.get(id) ?? next.get(id); };
@@ -113,11 +204,34 @@ export class Fx {
     const leave = (id, t) => { const from = live(id), to = next.get(id); if (to) this.fly(id, from, to, t, { lift: 1.0, half: 0.1 }); };
     /** A blow lands on `id` at `t`: it flashes and rings, and the table gives a little. */
     const strike = (id, t, dir) => {
-      this.glow(id, t); this.ring({ card: id }, t);
+      this.sound('clash', t, live(id)); this.glow(id, t); this.ring({ card: id }, t);
       this.at(t, () => { const c = sc.cards.get(id); if (c && dir && !defeated.has(id)) c.kick(dir[0], dir[1], 0.3); sc.nudge(dir ? dir[0] * 0.28 : 0, dir ? dir[1] * 0.28 : 0); });
     };
 
-    let t = 0, draws = 0, caster = null, blow = null;          // time so far; draws so far; the spell being cast; when and where the last blow lands
+    /**
+     * The card a spell takes (a Kiss) or sends back (a Shift) is lifted out of where it lies, held up beside the spell so it can be read, and then goes to its
+     * new place. A card going into a hand we cannot see (`handOwner`'s) is stood in for by the newest card of that hand, which turns face down on the way.
+     * Nothing else that changed place moves until it has gone: the pile or Chain it left closes up, and a row makes room, only then. Returns its key.
+     */
+    const present = (eid, handOwner) => {
+      const r = caster.ready, from = live(eid), to = next.get(eid), key = spot(eid)?.key ?? null, reveal = { ...caster.show, x: 2.2 };
+      let into = to, id = eid;
+      if (!to) {
+        const hand = [...next.values()].filter((c) => c.zone === 'hand' && c.owner === handOwner).sort((a, b) => b.order - a.order);
+        id = hand[0]?.id; into = id && next.get(id);
+        if (into) { if (sc.cards.has(id)) this.at(0, () => sc.cards.get(id)?.snapTo(from, sc.camera.quaternion)); else spawn.set(id, from); this.flip(id, r + HOLD + 0.02, 0.3, key, null); }
+      }
+      if (into) {
+        this.sound('grab', r, from); this.landing(id, r, { gain: 0.8 });
+        this.ring({ card: eid }, r - 0.1, { grow: 0.18, dur: 0.4 }); this.glow(id, r);
+        this.fly(id, reveal, into, r, { lift: 1.2, half: 0.2, via: reveal, linger: HOLD });
+      }
+      holdChanged(r + HOLD + 0.2, new Set([...defeated, caster.id, eid, id ?? eid]));
+      caster.end = r + HOLD + 0.45;
+      return key;
+    };
+
+    let t = 0, draws = 0, caster = null, blow = null, lamp = null;      // ...and a Lantern Keeper deployed in this move ({ id, at }: when its glow starts)          // time so far; draws so far; the spell being cast; when and where the last blow lands
     for (const e of events) {
       switch (e.t) {
         case 'end': t = Math.max(t, 0.12); break;
@@ -126,6 +240,7 @@ export class Fx {
           const n = next.get(e.id); if (!n || sc.cards.has(e.id)) break;
           const from = deckTop(e.p), at = t + draws++ * 0.09;
           spawn.set(e.id, from); this.fly(e.id, from, n, at);
+          this.sound('deal', at, from, { step: draws - 1, gain: e.p === viewer ? 1 : 0.75 });        // a run of draws climbs, card by card
           if (e.p === viewer && n.key) this.flip(e.id, at, 0.3, null, n.key);
           break;
         }
@@ -134,18 +249,29 @@ export class Fx {
           let from;
           if (sc.cards.has(e.id)) from = live(e.id);
           else { const h = handOf(n.owner); from = { ...h, y: h.y + 0.1, face: 1 }; spawn.set(e.id, from); this.flip(e.id, t, 0.3, null, n.key); }
+          if (!sc.cards.has(e.id)) this.sound('deal', t, from, { gain: 0.8 });
           this.fly(e.id, from, n, t, { lift: dist(from, n) > 4 ? 1.3 : 0.3 });
+          this.landing(e.id, t);
           if (n.owner !== viewer) this.ring({ card: e.id }, t + 0.32);
+          if (e.t === 'deploy') {
+            const at = t + LAND, here = (id) => (id === e.id ? n : live(id));
+            if (n.key === 'portal') this.portal(e.id, e.touches ?? [], at, here);
+            else if (n.key === 'resolve') this.resolve(e.id, e.touches ?? [], at, here);
+            else if (n.key === 'lantern') { lamp = { id: e.id, at }; if (!events.some((x) => x.t === 'light' && x.on && x.by === e.id)) this.lamp(e.id, at, here, 4); }    // with creatures to light, the glow goes as far as they are (below)
+          }
           break;
         }
         case 'release': t = this.unleash(view.players[e.p].chain.map((c) => c.id), live, t); break;
         case 'cast': {
-          const n = next.get(e.id), show = { ...SHOW(side(e.p)), x: events.some((x) => x.t === 'kiss' || x.t === 'recall') ? -2.2 : 0 };     // a Kiss (or a Shift that recalls a spell) leaves room beside it for the card it takes
+          const takes = events.some((x) => x.t === 'kiss' || x.t === 'recall' || x.t === 'shift'), theirs = e.p !== viewer;
+          const n = next.get(e.id), show = { ...SHOW(side(e.p)), x: takes ? -2.2 : 0 };     // a Kiss or a Shift leaves room beside it for the card it takes
           let from;
           if (sc.cards.has(e.id)) from = live(e.id);
           else { const h = handOf(e.p); from = { ...h, y: h.y + 0.1 }; spawn.set(e.id, from); this.flip(e.id, t, 0.28, null, n.key); }
+          this.sound(sc.cards.has(e.id) ? 'grab' : 'flip', t + (sc.cards.has(e.id) ? 0 : 0.14), show);
           this.path(e.id, [[0, 'live'], [t, show]]);
-          caster = { id: e.id, ready: t + 0.3, end: t + 0.42, show, p: e.p };
+          caster = { id: e.id, ready: t + 0.3 + (takes || theirs ? READ : 0), end: t + 0.42, show, p: e.p };
+          if (theirs) this.at(t, () => sc.say?.(`Opponent casts ${CARDS[e.spell]?.name ?? 'a spell'}.`));
           break;
         }
         case 'fireball': case 'shift': case 'rally': case 'kiss': case 'recall': case 'shadow': {
@@ -156,52 +282,32 @@ export class Fx {
             this.at(r, () => { const T = sc.cards.get(e.hit); sc.overlay.beam(new THREE.Vector3(a.x, 1.6, a.z), T ? T.root.position.clone().setY(1) : new THREE.Vector3(tg.x, 1, tg.z), { dur: 0.18 }); });
             holdChanged(land, new Set([...defeated, caster.id])); strike(e.hit, land, dir); blow = land; caster.end = land + 0.06;
           } else if (e.t === 'kiss') {
-            // The card the Kiss takes is lifted out of its pile (or Chain) and held up beside the spell, so it can be read, and then goes to its new owner.
-            const from = live(e.id), to = next.get(e.id), key = spot(e.id)?.key ?? null, reveal = { ...caster.show, x: 2.2 };
-            let into = to, id = e.id;
-            if (!to) {                                                // it went into a hand we cannot see: the newest card of that hand stands in for it
-              const hand = [...next.values()].filter((c) => c.zone === 'hand' && c.owner === caster.p).sort((a, b) => b.order - a.order);
-              id = hand[0]?.id; into = id && next.get(id);
-              if (into) { if (sc.cards.has(id)) this.at(0, () => sc.cards.get(id)?.snapTo(from, sc.camera.quaternion)); else spawn.set(id, from); this.flip(id, r + 0.62, 0.3, key, null); }
+            const key = present(e.id, caster.p);
+            if (key) {                                                // the line that confirms what was taken (for your own Kiss too: the pick is over once it shows)
+              const whose = e.from === viewer ? 'your' : 'their', where = e.zone === 'chain' ? 'Chain' : 'discard pile';
+              this.at(r, () => sc.say?.(`Witch’s Kiss takes ${CARDS[key].name} from ${whose} ${where}.`));
             }
-            if (into) {
-              this.ring({ card: e.id }, r - 0.1, { grow: 0.18, dur: 0.4 }); this.glow(id, r);
-              this.at(r, () => sc.overlay.beam(new THREE.Vector3(from.x, 1, from.z), new THREE.Vector3(reveal.x, 1.8, reveal.z), { dur: 0.22, color: '#e6c8ff' }));
-              this.fly(id, reveal, into, r, { lift: 1.2, half: 0.2, via: reveal, linger: 0.6 });
-              if (caster.p !== viewer && key) {
-                const whose = e.from === viewer ? 'your' : 'their', where = e.zone === 'chain' ? 'Chain' : 'discard pile';
-                this.at(r, () => sc.say?.(`Witch’s Kiss takes ${CARDS[key].name} from ${whose} ${where}.`));
-              }
-            }
-            caster.end = r + 0.6 + 0.45;
           } else if (e.t === 'shadow') {
             // The attacker is called out as the spell is held up; its attack follows (the `attack` events after this one), timed from the moment the spell is ready.
             this.glow(e.id, r); this.ring({ card: e.id }, r, { grow: 0.16 });
             caster.lead = r + 0.1; caster.end = r + 0.5;
           } else if (e.t === 'recall') {
-            // A spell wound in the enemy's Chain is lifted out, held up beside the Shift, and goes to its owner's hand (a hand we cannot see is stood in for by its newest card).
-            const from = live(e.id), to = next.get(e.id), key = spot(e.id)?.key ?? null, reveal = { ...caster.show, x: 2.2 };
-            let into = to, id = e.id;
-            if (!to) {
-              const hand = [...next.values()].filter((c) => c.zone === 'hand' && c.owner === e.from).sort((a, b) => b.order - a.order);
-              id = hand[0]?.id; into = id && next.get(id);
-              if (into) { if (sc.cards.has(id)) this.at(0, () => sc.cards.get(id)?.snapTo(from, sc.camera.quaternion)); else spawn.set(id, from); this.flip(id, r + 0.62, 0.3, key, null); }
-            }
-            if (into) {
-              this.ring({ card: e.id }, r - 0.1, { grow: 0.18, dur: 0.4 }); this.glow(id, r);
-              this.fly(id, reveal, into, r, { lift: 1.2, half: 0.2, via: reveal, linger: 0.6 });
-              if (key) this.at(r, () => sc.say?.(`Shift returns ${CARDS[key].name} to ${e.from === viewer ? 'your' : 'their'} hand.`));
-            }
-            caster.end = r + 0.6 + 0.45;
+            const key = present(e.id, e.from);
+            if (key) this.at(r, () => sc.say?.(`Shift returns ${CARDS[key].name} to ${e.from === viewer ? 'your' : 'their'} hand.`));
+          } else if (e.t === 'shift') {
+            // A Guardian is lifted off the card it guarded (which rings: it is no longer guarded), held up beside the Shift, and goes to its owner's hand.
+            const owner = spot(e.id)?.owner;
+            present(e.id, owner);
+            if (e.from) this.ring({ card: e.from }, r + 0.1, { grow: 0.2, dur: 0.5 });
+            if (caster.p !== viewer) { const whose = owner === viewer ? 'your' : 'their'; this.at(r, () => sc.say?.(`Shift sends ${whose} Guardian back to ${whose} hand.`)); }
           } else {
             holdChanged(r, new Set([...defeated, caster.id]));
-            const to = e.t === 'rally' || e.t === 'shift' ? e.id : e.to; if (to) { this.glow(to, r + 0.04); this.ring({ card: to }, r + 0.04, { grow: 0.16 }); }
-            if (e.t === 'shift' && e.from) this.ring({ card: e.from }, r + 0.04, { grow: 0.16 });       // the card that is no longer guarded
+            const to = e.t === 'rally' ? e.id : e.to; if (to) { this.glow(to, r + 0.04); this.ring({ card: to }, r + 0.04, { grow: 0.16 }); }
             caster.end = r + 0.32;
           }
           break;
         }
-        case 'behind': {                                         // every unguarded creature is hit at once: all flash and ring together, with one push for the lot
+        case 'behind': {                                         // every unguarded creature, both players', is hit at once: all flash and ring together, with one push for the lot
           if (!caster) break;
           const land = caster.ready + 0.16;
           holdChanged(land, new Set([...defeated, caster.id]));
@@ -212,10 +318,13 @@ export class Fx {
         }
         case 'attack': {
           const a = live(e.id), tg = live(e.hit), dir = unit(a, tg), far = dist(a, tg) > 5, o = caster?.lead ?? 0;      // a Shadow Step's attack waits for its spell
+          if (e.lit) { const color = this.tint('lantern'); this.touch(e.id, o, 0.4, (c, u) => { c.bright = Math.sin(Math.PI * u); c.setVeil({ color, shape: 2, amount: 0.6 * Math.sin(Math.PI * u), alpha: 0.9 }); }); }   // a spent attacker the Lantern lets attack flares green
           if (e.portal) {
             const pid = view.players[next.get(e.id)?.owner ?? prev.get(e.id)?.owner]?.field.find((c) => c.key === 'portal')?.id;
             this.at(o + 0.02, () => { const A = sc.cards.get(e.id), T = sc.cards.get(e.hit); if (A && T) sc.overlay.beam(A.root.position.clone().setY(1), T.root.position.clone().setY(1), { dur: 0.2, color: '#bfe6ff' }); });
             if (pid) { this.glow(pid, o); this.ring({ card: pid }, o); }
+            const owner = spot(e.hit)?.owner, color = this.tint('portal');           // the Guardians on the card hit are passed straight through: they go see-through for a beat
+            for (const gd of view.players[owner]?.field.filter((c) => c.guards === e.hit) ?? []) this.ghost(gd.id, o, color, { dur: 0.5, depth: 0.6, tip: 0 });
             blow = o + 0.24;
           } else if (far) {
             const back = { ...a, x: a.x - dir[0] * 0.8, z: a.z - dir[1] * 0.8, y: 1.0, face: 0 }, hit = { ...a, x: tg.x - dir[0] * 3.1, z: tg.z - dir[1] * 3.1, y: 1.4, face: 0 };
@@ -223,6 +332,7 @@ export class Fx {
             blow = o + 0.26;
           } else blow = o + 0.06;
           holdChanged(blow, new Set([...defeated, e.id, e.hit]));
+          if (defeated.has(e.hit)) this.sound('death', blow + 0.04, tg);
           if (defeated.has(e.hit)) this.fly(e.hit, tg, next.get(e.hit) ?? tg, blow, { lift: 1.0, half: 0.1 }); else this.path(e.hit, [[0, 'live'], [blow, null]]);
           this.path(e.id, [[blow + 0.03, null]]);
           strike(e.hit, blow, dir);
@@ -233,6 +343,7 @@ export class Fx {
           const heart = e.saved, angel = e.id;
           sc.haloHold.add(heart); this.at(blow ?? 0.2, () => sc.haloHold.delete(heart));
           this.fly(angel, live(angel), next.get(angel) ?? live(angel), blow ?? 0.2, { lift: 1.0, half: 0.1 });
+          this.sound('death', (blow ?? 0.2) + 0.04, live(angel), { gain: 0.8 });
           this.glow(heart, blow ?? 0.2); this.ring({ card: heart }, blow ?? 0.2, { grow: 0.4, dur: 0.5, alpha: 1 });
           break;
         }
@@ -244,13 +355,23 @@ export class Fx {
           break;
         }
         case 'defeat': {                                         // by a Fireball: the card flies to its pile when the blow lands
-          if (blow !== null && caster && !events.some((x) => x.t === 'attack' && x.hit === e.id)) this.fly(e.id, live(e.id), next.get(e.id) ?? live(e.id), blow, { lift: 1.0, half: 0.1 });
+          if (blow !== null && caster && !events.some((x) => x.t === 'attack' && x.hit === e.id)) { this.sound('death', blow + 0.04, live(e.id)); this.fly(e.id, live(e.id), next.get(e.id) ?? live(e.id), blow, { lift: 1.0, half: 0.1 }); }
+          break;
+        }
+        case 'light': {                                          // a Lantern Keeper's light comes on or goes out over spent creatures
+          if (e.on) {
+            const here = (id) => (id === e.by ? next.get(id) ?? live(id) : live(id));      // the Keeper may still be on its way to its place
+            if (lamp?.id === e.by) this.lightOn(e.by, e.ids, lamp.at, here);
+            else this.lightOn(e.by, e.ids, caster ? caster.ready + 0.1 : 0.1, here);
+          } else this.lightOff(e.ids, (blow ?? caster?.ready ?? 0) + 0.1, live);
           break;
         }
         case 'bonus': this.ring({ card: e.id }, (blow ?? 0.1) + 0.14, { grow: 0.2, dur: 0.4 }); break;
         case 'reguard': if (e.to) { this.glow(e.to, 0.32); this.ring({ card: e.to }, 0.32, { grow: 0.14 }); } break;
         case 'recover': {
-          [...prev.values()].filter((c) => c.owner === e.p && c.dim && next.get(c.id) && !next.get(c.id).dim).forEach((c, i) => { this.glow(c.id, 0.05 + i * 0.05); this.ring({ card: c.id }, 0.05 + i * 0.05, { grow: 0.1 }); });
+          const stood = [...prev.values()].filter((c) => c.owner === e.p && c.dim && next.get(c.id) && !next.get(c.id).dim);
+          if (e.free) stood.forEach((c, i) => this.bless(c.id, 0.05 + i * 0.1, live(c.id), { i }));            // free, by a Heaven's Resolve: its light falls on each one that stands
+          else stood.forEach((c, i) => { this.glow(c.id, 0.05 + i * 0.05); this.ring({ card: c.id }, 0.05 + i * 0.05, { grow: 0.1 }); });
           break;
         }
         case 'win': {
@@ -264,7 +385,7 @@ export class Fx {
       }
     }
     // The spell that was cast goes to its pile once its effect has landed.
-    if (caster) { const c = caster; this.path(c.id, [[c.end, null]]); }
+    if (caster) { const c = caster; this.path(c.id, [[c.end, null]]); this.sound('return', c.end, c.show, { gain: 0.6 }); this.landing(c.id, c.end, { gain: 0.5 }); }
     return spawn;
   }
 }

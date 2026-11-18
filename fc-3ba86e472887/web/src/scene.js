@@ -6,9 +6,9 @@ import * as THREE from 'three';
 import { Card, SPRING } from './card.js';
 import { Table } from './table.js';
 import { Overlay } from './overlay.js';
-import { layout, rowIndexAt, VIEW } from './layout.js';
+import { layout, rowIndexAt, VIEW, TABLE } from './layout.js';
 import { Fx } from './fx.js';
-import { protector } from '../../src/index.js';
+import { protector, inForce } from '../../src/index.js';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 
@@ -28,7 +28,8 @@ export class Scene {
     this.hover = null;                                      // { id }: the face-up card under the pointer
     this.press = null;                                      // id of the card the pointer is down on
     this.drag = null;                                       // { id, x, y, z }: the card being carried and where it is carried to
-    this.view = null; this.viewer = 0; this.fan = null;
+    this.picked = null;                                     // id of the card picked up by a tap (held up while its target is chosen)
+    this.view = null; this.viewer = 0; this.gather = null;
     this.poses = new Map();                                 // card id -> where the layout puts it (the last layout, so a move can be told from what it changed)
     this.row = [[], []];                                    // each player's row as it stands, left to right: [{ id, x }]. A card the player drops on the field stays where it was put.
     this.placing = null;                                    // { owner, id, x }: the card just dropped on the field, and where (the next `show` puts it in the row there)
@@ -38,6 +39,8 @@ export class Scene {
     this.fx = new Fx(this);
     this.ray = new THREE.Raycaster();
     this.resize(); window.addEventListener('resize', () => this.resize());
+    // A window resize event is not the only way the canvas changes size (browser zoom, a docked panel, full screen, a move to another screen): watch the canvas itself.
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.resize()).observe(canvas);
     this.last = performance.now(); requestAnimationFrame((t) => this.frame(t));
   }
   /** The art needs the renderer (for texture settings), so it arrives after the scene exists. */
@@ -48,6 +51,8 @@ export class Scene {
    */
   resize() {
     const w = this.canvas.clientWidth || innerWidth, h = this.canvas.clientHeight || innerHeight;
+    this.size = { w, h, dpr: window.devicePixelRatio || 1 };
+    this.renderer.setPixelRatio(Math.min(this.size.dpr, 2));
     this.renderer.setSize(w, h, false);
     const cam = this.camera; cam.aspect = w / h;
     const tilt = THREE.MathUtils.degToRad(CAMERA_TILT), target = new THREE.Vector3(0, 0, (VIEW.zMin + VIEW.zMax) / 2 + 0.6);
@@ -59,33 +64,37 @@ export class Scene {
     let lo = 10, hi = 400;
     for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
     fits(hi); this.camBase.copy(cam.position);
+    // Where the table's left edge and its middle line fall on the screen, for the page around the canvas (the reference card sits in the margin there).
+    const edge = new THREE.Vector3(-TABLE.w / 2, 0, 0).project(cam), root = document.documentElement.style;
+    root.setProperty('--table-left', `${((edge.x + 1) / 2) * w}px`); root.setProperty('--table-mid', `${((1 - edge.y) / 2) * h}px`);
   }
 
   /**
-   * Make the scene match `view`, as seen by `viewer`. `snap` puts every card straight in place (a change of seat); `fan` opens one player's discard pile.
+   * Make the scene match `view`, as seen by `viewer`. `snap` puts every card straight in place (a change of seat); `gather`: the ids of the cards a Witch's Kiss can take, brought up into one row.
    * `events` are the events of the move that led here (from the same view): they say how the cards got where they are, and the motion plays from them.
    */
-  show(view, viewer, { snap = false, fan = null, events = null } = {}) {
-    this.view = view; this.viewer = viewer; this.fan = fan; this.gap = null;
+  show(view, viewer, { snap = false, gather = null, events = null } = {}) {
+    this.view = view; this.viewer = viewer; this.gather = gather; this.gap = null;
     const order = this.row.map((r) => r.map((e) => e.id));
     if (this.placing) {                                      // a card dropped on the field takes the place it was dropped at, among the cards already standing
       const { owner, id, x } = this.placing; this.placing = null;
       const joins = view.players[owner].field.some((c) => c.id === id && !(c.key === 'guardian' && c.guards));
       if (joins && !order[owner].includes(id)) order[owner].splice(rowIndexAt(this.row[owner], x), 0, id);
     }
-    const L = layout(view, viewer, { fan, order }), next = new Map(L.cards.map((p) => [p.id, p]));
+    const L = layout(view, viewer, { gather, order }), next = new Map(L.cards.map((p) => [p.id, p]));
     this.row = L.rows;
     this.fx.flush();                                        // whatever the last move was still doing is finished off at once
     const spawn = events && !snap ? this.fx.plan(events, this.poses, next, view, viewer) : new Map();
     this.layout = L; this.poses = next;
-    this.halos = new Set(view.players.filter((P) => protector(view, P.idx) && P.hearts[0]).map((P) => P.hearts[0].id));
+    // A ring marks a standing effect that is in force: the Heart an Angel would save, and every Warp Portal, Heaven's Resolve and ready Lantern Keeper.
+    this.halos = new Set(view.players.flatMap((P) => [...(protector(view, P.idx) && P.hearts[0] ? [P.hearts[0].id] : []), ...P.field.filter((c) => c.key !== 'angel' && inForce(view, c)).map((c) => c.id)]));
     this.table.setTurn(view.turn === viewer ? 1 : -1, snap);
     this.applyLayout(snap, spawn); this.table.place(L);
     this.fx.update(0);                                      // what starts at once starts before the first frame
   }
   haloIds() { return new Set([...(this.halos ?? []), ...this.haloHold]); }
   /** Remove every card (a new game). */
-  clear() { for (const c of this.cards.values()) this.scene.remove(c.root); this.cards.clear(); this.poses = new Map(); this.row = [[], []]; this.placing = this.gap = null; this.fx.flush(); this.hover = this.drag = this.press = null; }
+  clear() { for (const c of this.cards.values()) this.scene.remove(c.root); this.cards.clear(); this.poses = new Map(); this.row = [[], []]; this.placing = this.gap = null; this.fx.flush(); this.hover = this.drag = this.press = this.picked = null; }
   /**
    * While a creature is carried over the field: the cards in `owner`'s row open a gap where it would go if dropped with its centre at `x` (as the owner sees
    * the table), and close up again for `null`. Only the row moves; nothing else is laid out again.
@@ -95,7 +104,7 @@ export class Scene {
     const gap = x === null || x === undefined ? null : { owner, index: rowIndexAt(this.row[owner] ?? [], x) };
     if (gap?.index === this.gap?.index && gap?.owner === this.gap?.owner) return;
     this.gap = gap;
-    const L = layout(this.view, this.viewer, { fan: this.fan, order: this.row.map((r) => r.map((e) => e.id)), gap });
+    const L = layout(this.view, this.viewer, { gather: this.gather, order: this.row.map((r) => r.map((e) => e.id)), gap });
     for (const p of L.cards) { const c = this.cards.get(p.id); if (c && p.zone === 'field' && c.base) c.base = p; }
   }
   applyLayout(snap, spawn) {
@@ -120,6 +129,12 @@ export class Scene {
     c.boost = 0;
     if (this.drag?.id === c.id) { Object.assign(p, { x: this.drag.x, y: this.drag.y, z: this.drag.z, spin: 0, face: 1, scale: b.scale * 1.04 }); c.boost = 4000; }
     else if (c.held) { Object.assign(p, c.held.pose); c.boost = 600; }                // part of a move being played: it goes where the move takes it
+    else if (this.picked === c.id) {                                                  // picked up by a tap: it stands up clearly above its place until the exchange ends
+      const near = b.yaw === 0 ? 1 : -1;
+      if (b.zone === 'hand') Object.assign(p, { y: b.y + 0.9, z: b.z - near * 0.75, scale: b.scale * 1.1, spin: 0 });
+      else Object.assign(p, { y: b.y + 0.8, scale: b.scale * 1.12, face: Math.max(b.face ?? 0, 0.35) });
+      c.boost = 1200;
+    }
     else if (this.press === c.id) Object.assign(p, { scale: b.scale * 0.97 });
     else if (this.hover?.id === c.id) {
       const near = b.yaw === 0 ? 1 : -1;
@@ -158,9 +173,14 @@ export class Scene {
   }
 
   // ---- the pointer ---------------------------------------------------------------------------------------------------------------------------
-  ndc(e) { const r = this.canvas.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1)); }
+  ndc(e) {
+    // The view must match the canvas as it is right now; if a size change was missed, catch up before reading the pointer.
+    if (this.canvas.clientWidth !== this.size.w || this.canvas.clientHeight !== this.size.h || (window.devicePixelRatio || 1) !== this.size.dpr) this.resize();
+    const r = this.canvas.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+  }
   /** The cards under the pointer, nearest first: [{ card, u, v }]. `skip` is a card id to ignore (the one being carried). */
   cardsAt(ndc, skip = null) {
+    this.camera.updateMatrixWorld();
     this.ray.setFromCamera(ndc, this.camera);
     const fronts = [...this.cards.values()].filter((c) => c.id !== skip).map((c) => c.front);
     // The card drawn on top wins, which is not always the nearest in space (cards face the camera and are layered by height).
@@ -168,6 +188,7 @@ export class Scene {
   }
   /** Where the pointer's ray meets the horizontal plane at height `y`: { x, z }. */
   pointAt(ndc, y = 0.05) {
+    this.camera.updateMatrixWorld();
     this.ray.setFromCamera(ndc, this.camera);
     const hit = this.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
     return hit ? { x: hit.x, z: hit.z } : null;

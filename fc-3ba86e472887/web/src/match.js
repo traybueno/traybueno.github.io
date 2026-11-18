@@ -39,10 +39,10 @@ export function snapshot(s) {
     both(s, 'chain', (p) => (p.chain.length ? p.chain.map((c) => CODE[c.key]).join(',') : '-')), both(s, 'field', (p) => fieldOf(s, p)),
   ].join('|');
 }
-/** One move as a short token, from the game before it and the events it caused. */
+/** One move as a short token, from the game before it and the events it caused. An attacker defeated by its own first blow on a Heart is not counted as `=x`: the token reads `=s`, the Heart turned spent. */
 export function token(before, move, after) {
   const me = before.turn, r = (id) => ref(before, id, me), e = after.events;
-  const result = e.some((x) => x.t === 'win') ? '=W' : e.some((x) => x.t === 'rescue') ? '=r' : e.some((x) => x.t === 'defeat') ? '=x' : e.some((x) => x.t === 'hit') ? '=s' : '';
+  const result = e.some((x) => x.t === 'win') ? '=W' : e.some((x) => x.t === 'rescue') ? '=r' : e.some((x) => x.t === 'defeat' && x.id !== (move.cardId ?? move.attackerId)) ? '=x' : e.some((x) => x.t === 'hit') ? '=s' : '';
   const hand = (id) => CODE[before.players[me].hand.find((c) => c.id === id)?.key] ?? '?';
   switch (move.type) {
     case 'deploy': return `dep:${hand(move.cardId)}${move.dest === 'guard' ? `>${r(move.targetId)}` : ''}`;
