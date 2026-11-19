@@ -285,6 +285,61 @@
   /* The dark beat between Start game and the deal (ui.js times it): in quickly, held, then lifted slowly off the table. */
   .veil { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; transition: opacity .9s ease-out; }
   .veil.in { opacity: 1; pointer-events: auto; transition: opacity .55s ease-in; }
+
+  /* ---- Phones (web/src/phone.js puts `phone` on <html>; a desktop never has it). The table plays in landscape only; held upright during a game, the
+     phone is asked to turn. Sideways, the screen is short, so the controls are sized for a thumb and anything read (the big card, the rules) fills the height. */
+  .rotate { display: none; }
+  html.phone.portrait.ingame .rotate { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #000; text-align: center; padding: 24px; }
+  .rotate svg { width: 92px; height: 92px; fill: none; stroke: var(--cream); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; animation: r-turn 2.6s ease-in-out infinite; }
+  .rotate svg .arc { stroke: #d9a441; }
+  @keyframes r-turn { 0%, 25% { transform: rotate(0); } 55%, 85% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+  .rotate .rk { font: 700 18px 'Roboto Slab', Georgia, serif; letter-spacing: .14em; text-transform: uppercase; color: #fff8dc; }
+  .rotate .rs { font-size: 14px; letter-spacing: .06em; opacity: .65; }
+  @media (prefers-reduced-motion: reduce) { .rotate svg { animation: none; transform: rotate(-90deg); } }
+
+  html.phone:not(.portrait) {
+    --side-w: clamp(78px, calc(var(--table-left, 120px) - 12px), 132px);
+    --side-r: max(4px, env(safe-area-inset-right), calc((var(--table-left, 120px) - var(--side-w)) / 2));
+  }
+  /* The action buttons and Menu: tall enough for a thumb, lettering a step larger. */
+  html.phone:not(.portrait) .bar { gap: 8px; }
+  html.phone:not(.portrait) .bar .btn { min-height: 46px; font-size: 12px; letter-spacing: .08em; padding: 10px 6px; }
+  html.phone:not(.portrait) .bar .btn.end { min-height: 54px; font-size: 13px; }
+  html.phone:not(.portrait) .menubtn.btn { min-height: 40px; font-size: 11px; letter-spacing: .1em; }
+  /* The big card: held finger shows it nearly the screen's height, at the side away from the finger. */
+  html.phone .preview { display: block; left: max(10px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); height: calc(100vh - 20px); max-height: none; padding: 4px; outline-offset: 3px; z-index: 7; }
+  html.phone .preview.right { left: auto; right: max(10px, env(safe-area-inset-right)); }
+  /* The reference card: small in the left margin as on a desktop; opened (a tap), it fills the height so its words can be read. */
+  html.phone:not(.portrait) .refcard { --rf-w: clamp(42px, calc(var(--table-left, 120px) - 16px), 80px); left: max(4px, env(safe-area-inset-left), calc((var(--table-left, 120px) - var(--rf-w)) / 2)); top: var(--table-mid, 50%); bottom: auto; transform: translateY(-50%); }
+  html.phone:not(.portrait) .refcard.open { --rf-h: calc(100vh - 16px); top: 50%; z-index: 8; }
+  html.phone:not(.portrait) .rf-tag { font-size: 10px; top: calc(100% + 5px); }
+  /* The hint and the prompt banner: kept short of the side columns. */
+  html.phone:not(.portrait) .hint { top: max(6px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); max-width: calc(var(--table-left, 120px) - 10px); font-size: 12px; line-height: 1.3; }
+  html.phone:not(.portrait) .hint.prompt { top: var(--table-mid, 50%); left: 50%; max-width: min(calc(100vw - 2 * var(--table-left, 40px) - 16px), 80vw); font-size: 15px; padding: 7px 14px; }
+  html.phone:not(.portrait) .lesson { top: max(6px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); padding: 5px 14px 6px; max-width: calc(var(--table-left, 120px) - 16px); }
+  html.phone:not(.portrait) .lesson .lk { font-size: 9px; letter-spacing: .18em; }
+  html.phone:not(.portrait) .lesson .lg { font-size: 13px; white-space: normal; }
+  html.phone:not(.portrait) .tabbtn { bottom: max(8px, env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left)); }
+  /* Panels, covers and the result: fit the short screen, and scroll rather than spill. */
+  html.phone:not(.portrait) .layer { padding: 8px; align-items: safe center; overflow-y: auto; }
+  html.phone:not(.portrait) .pin { gap: 10px; padding: 18px 20px 14px; }
+  html.phone:not(.portrait) .pcol { gap: 7px; }
+  html.phone:not(.portrait) .pcol .btn { min-height: 40px; padding: 8px 14px; }
+  html.phone:not(.portrait) .who { font-size: 30px; }
+  html.phone:not(.portrait) .over { gap: 8px; }
+  html.phone:not(.portrait) .over .row { margin-top: 12px; }
+  html.phone:not(.portrait) .over .ltext { font-size: 14px; margin-top: 6px; }
+  /* The title held sideways: the name, a smaller fan and the buttons all inside the short screen. */
+  html.phone:not(.portrait) .tbody { gap: 6px; padding: 14px 16px 10px; }
+  html.phone:not(.portrait) .tname { font-size: clamp(24px, 9vh, 40px); }
+  html.phone:not(.portrait) .tfan { --ch: clamp(60px, 22vh, 110px); margin-bottom: calc(var(--ch) * .14); }
+  html.phone:not(.portrait) .tpick .k { display: none; }
+  html.phone:not(.portrait) .sel .nm { font-size: 17px; }
+  html.phone:not(.portrait) .sel .sub { margin-top: 2px; font-size: 12px; }
+  html.phone:not(.portrait) .sel.opp .val { min-height: 0; }
+  html.phone:not(.portrait) .tmain { flex-direction: row; gap: 12px; }
+  html.phone:not(.portrait) .btn.go { min-width: 0; font-size: 13px; padding: 11px 20px; }
+  html.phone:not(.portrait) .tframe .orn.top { top: -2px; }
 </style>
 <script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js" } }</script>
 </head>
@@ -302,6 +357,6 @@
     setTimeout(done, 6000);
   })();
 </script>
-<script type="module" src="./src/main.js?v=54cfdab"></script>
+<script type="module" src="./src/main.js?v=ad16557"></script>
 </body>
 </html>

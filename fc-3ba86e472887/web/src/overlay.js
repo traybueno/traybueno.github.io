@@ -4,7 +4,7 @@
  * never look like geometry. They fade in over a moment while settling a few pixels inward; the one under the pointer turns white and lengthens slightly.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=54cfdab';
+import { CARD_W, CARD_H } from './layout.js?v=ad16557';
 
 const ARM = 11, ARM_FOCUS = 15, GAP = 3, GAP_FROM = 9, FADE_IN = 0.11, FADE_OUT = 0.09;
 const COLOR = { idle: '#efe7c6', idleRgb: [239, 231, 198], focus: '#ffffff' };

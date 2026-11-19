@@ -11,10 +11,17 @@ export const BOARD_SCALE = 0.92;                          // cards on the table 
 export const CHAIN_SCALE = 0.78;                          // and Chain cards a little smaller still
 export const TABLE = { w: 41, d: 30 };                    // the table plane
 export const VIEW = { w: 40.6, zMin: -14.2, zMax: 14.9 }; // what the camera frames: the table and the viewer's hand, which sits a little past the near edge
+// On a phone held sideways (web/src/phone.js) the camera frames closer, so the cards are as large as the short screen allows: the other player's hand
+// (backs) only shows its near edge, and the viewer's hand, larger, runs a little off the bottom like cards held low (a held finger shows any card big).
+// (`w` is wider than the table so a narrow phone still leaves the side columns room for the buttons and the rules card.)
+export const PHONE_VIEW = { w: 47, zMin: -11.4, zMax: 15.2 };
 
 const FIELD_Z = 4.4, HEART_Z = 4.9;                       // the row of cards, the Heart a little nearer the owner
 // The viewer's hand rests a little below the near edge, every card readable. The other player's hand sits past the far edge.
-const HAND = { z: 12.5, lift: 1.1, scale: 1.12 };
+const DESK_HAND = { z: 12.5, lift: 1.1, scale: 1.12 }, PHONE_HAND = { z: 12.7, lift: 1.1, scale: 1.5 };
+let HAND = DESK_HAND;
+/** The phone layout (a larger hand), or the normal one. Only web/src/phone.js mode turns it on. */
+export const setPhoneHand = (on) => { HAND = on ? PHONE_HAND : DESK_HAND; };
 const FAR_HAND = { z: 13.7, lift: 1.0, scale: 1 };
 const DECK = { x: 15.6, z: 8.4 }, DISCARD = { x: 15.6, z: 3.2 };
 const CHAIN = { x: 15.2, z0: 2.3, dz: 4.1 };                // the three Chain slots: clear of the centre line above and of the frame below

@@ -3,13 +3,14 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=54cfdab';
-import { Table } from './table.js?v=54cfdab';
-import { Overlay } from './overlay.js?v=54cfdab';
-import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=54cfdab';
-import { Fx } from './fx.js?v=54cfdab';
-import { protector, inForce, affects } from '../../src/index.js?v=54cfdab';
-import { portalPulse } from './overlay.js?v=54cfdab';
+import { Card, SPRING } from './card.js?v=ad16557';
+import { Table } from './table.js?v=ad16557';
+import { Overlay } from './overlay.js?v=ad16557';
+import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=ad16557';
+import { phone } from './phone.js?v=ad16557';
+import { Fx } from './fx.js?v=ad16557';
+import { protector, inForce, affects } from '../../src/index.js?v=ad16557';
+import { portalPulse } from './overlay.js?v=ad16557';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 
@@ -60,6 +61,9 @@ export class Scene {
     this.renderer.setPixelRatio(Math.min(this.size.dpr, 2));
     this.renderer.setSize(w, h, false);
     const cam = this.camera; cam.aspect = w / h;
+    // A phone held sideways frames the table closer and holds a larger hand (layout.js PHONE_VIEW); a desktop never does.
+    const close = phone && w > h, VIEW = close ? PHONE_VIEW : VIEW_DESK;
+    if (close !== this.close) { this.close = close; setPhoneHand(close); if (this.view) this.show(this.view, this.viewer, { snap: false, gather: this.gather, held: this.held }); }
     const tilt = THREE.MathUtils.degToRad(CAMERA_TILT), target = new THREE.Vector3(0, 0, (VIEW.zMin + VIEW.zMax) / 2 + 0.6);
     const corners = [-1, 1].flatMap((sx) => [VIEW.zMin, VIEW.zMax].flatMap((z) => [0, 2.2].map((y) => new THREE.Vector3(sx * VIEW.w / 2, y, z))));
     const fits = (d) => {

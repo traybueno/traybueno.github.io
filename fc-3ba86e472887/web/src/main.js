@@ -7,18 +7,18 @@
  * while you watch from seat 0 (`?seat=1` flips the view); `?learn` opens Learn to play (tutorial.js); `?vs=anim` is the animation board (made-up positions and a menu of effects to replay, see animboard.js); the Bot vs Bot game's compact log is `fcLog()` in the console. Dev aids: ?bot=squire|knight|warlock skips the start screen, ?seed=N picks the deal, ?plies=K plays K random
  * legal moves first (a mid-game position to try things on), ?seat=0|1 fixes who is looking, key N deals a new game.
  */
-import { newGame, legalMoves, apply, viewFor, CARDS } from '../../src/index.js?v=54cfdab';
-import { loadArt } from './assets.js?v=54cfdab';
-import { Scene } from './scene.js?v=54cfdab';
-import { Input } from './input.js?v=54cfdab';
-import { createSound } from './sound.js?v=54cfdab';
-import { createMusic } from './music.js?v=54cfdab';
-import { createUI } from './ui.js?v=54cfdab';
-import { makeBot, PROFILES } from './bot.js?v=54cfdab';
-import { MatchLog } from './match.js?v=54cfdab';
-import { SCENARIOS, build, stepMove } from './animboard.js?v=54cfdab';
-import { STORY, Tutor, buildLesson } from './tutorial.js?v=54cfdab';
-import { createGuide } from './guide.js?v=54cfdab';
+import { newGame, legalMoves, apply, viewFor, CARDS } from '../../src/index.js?v=ad16557';
+import { loadArt } from './assets.js?v=ad16557';
+import { Scene } from './scene.js?v=ad16557';
+import { Input } from './input.js?v=ad16557';
+import { createSound } from './sound.js?v=ad16557';
+import { createMusic } from './music.js?v=ad16557';
+import { createUI } from './ui.js?v=ad16557';
+import { makeBot, PROFILES } from './bot.js?v=ad16557';
+import { MatchLog } from './match.js?v=ad16557';
+import { SCENARIOS, build, stepMove } from './animboard.js?v=ad16557';
+import { STORY, Tutor, buildLesson } from './tutorial.js?v=ad16557';
+import { createGuide } from './guide.js?v=ad16557';
 
 const params = new URLSearchParams(location.search);
 const hotseat = params.get('vs') === 'hotseat', watch = params.get('vs') === 'bots', anim = params.get('vs') === 'anim';
@@ -73,7 +73,7 @@ try {
     onMove: (m) => play(m),
     onGather: (ids, held = null) => { if (JSON.stringify([ids, held]) !== JSON.stringify([gather, gatherHeld])) { gather = ids; gatherHeld = ids ? held : null; scene.show(viewFor(game, viewer), viewer, { gather, held: gatherHeld }); } },
     onChange: () => hint(),
-    onPreview: (key) => ui.preview(key),
+    onPreview: (key, right) => ui.preview(key, right),
   });
   const guide = createGuide(scene, input);                                  // Learn to play: the mouse that shows each move (guide.js)
   const botsTurn = () => !anim && !hotseat && game.phase !== 'over' && !tutor?.done(game) && !tutor?.telling(game) && (watch || game.turn === BOT);       // a finished lesson stops the opponent too

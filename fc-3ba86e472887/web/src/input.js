@@ -3,11 +3,13 @@
  * accepted. A drop on a legal target makes that move (asking a second question in place if the move is not yet complete); a drop anywhere else lets
  * the card go back where it came from.
  */
-import { CARDS, isGuarded, locate } from '../../src/index.js?v=54cfdab';
-import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=54cfdab';
-import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=54cfdab';
+import { CARDS, isGuarded, locate } from '../../src/index.js?v=ad16557';
+import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=ad16557';
+import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=ad16557';
+import { phone } from './phone.js?v=ad16557';
 
 const MOVE_PX = 7;
+const PEEK_MS = 260;                                   // on a phone, a finger held this long on a face-up card shows it big (a phone has no hover)
 const inRect = (p, r, m = 0.5) => Math.abs(p.x - r.x) <= r.w / 2 + m && Math.abs(p.z - r.z) <= r.d / 2 + m;
 const nameOf = (view, id) => { const c = locate(view, id)?.card; return c ? CARDS[c.key].name : 'it'; };
 
@@ -22,7 +24,7 @@ export class Input {
     el.addEventListener('pointerdown', (e) => this.onDown(e));
     el.addEventListener('pointermove', (e) => this.onMove(e));
     el.addEventListener('pointerup', (e) => this.onUp(e));
-    el.addEventListener('pointercancel', () => this.reset());
+    el.addEventListener('pointercancel', () => { this.unpeek(this.down); this.reset(); });
     el.addEventListener('pointerleave', () => { this.scene.hover = null; this.cb.onPreview(null); });
     addEventListener('keydown', (e) => { if (e.key === 'Escape') this.cancel(); });
   }
@@ -91,10 +93,24 @@ export class Input {
     this.down = { x: e.clientX, y: e.clientY, src: this.sourceAt(ndc) };
     if (this.down.src) this.sound('grab', this.down.src);               // the card is taken the moment it is pressed
     this.scene.press = this.down.src;                                    // the card dips a little under the press
+    if (phone && e.pointerType !== 'mouse') this.peekAt(ndc, e.clientX);
   }
+  /**
+   * A phone: a finger held still on a face-up card shows it big, at the side away from the finger, until it is lifted. Letting go after reading
+   * does nothing else (no tap is made); moving the finger hides it and carries the card as usual.
+   */
+  peekAt(ndc, px) {
+    const top = this.scene.cardsAt(ndc)[0]; if (!top?.card.key) return;
+    const down = this.down, key = top.card.key, right = px < innerWidth * 0.45;
+    down.peek = setTimeout(() => { if (this.down === down && !this.drag) { down.peeked = true; this.cb.onPreview(key, right); } }, PEEK_MS);
+  }
+  /** The held card is let go of, or the finger moved off to carry it: the big copy goes. */
+  unpeek(down) { if (!down?.peek) return; clearTimeout(down.peek); down.peek = null; if (down.peeked) this.cb.onPreview(null); }
   onMove(e) {
     if (!this.enabled || !this.ctx) return;
     const ndc = this.scene.ndc(e);
+    const touch = phone && e.pointerType !== 'mouse';
+    if (touch && this.down?.peek && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > MOVE_PX) { this.unpeek(this.down); this.down.peeked = false; }
     if (this.down?.src && !this.drag && !this.choice && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > MOVE_PX) this.startDrag(this.down.src, ndc);
     if (this.drag) {
       this.carry(ndc);
@@ -102,19 +118,21 @@ export class Input {
       this.makeRoom(f, this.scene.drag?.x);
       return;
     }
-    this.hover(ndc);
+    this.hover(ndc, touch);
   }
   onUp(e) {
     if (!this.enabled || !this.ctx || !this.down) return;
     const down = this.down, ndc = this.scene.ndc(e); this.down = null;
     this.scene.press = null;
+    this.unpeek(down);
     if (this.drag) return this.drop(ndc);
+    if (down.peeked) return;                                             // the card was held to be read: that is all
     this.click(ndc, down.src);
   }
 
-  hover(ndc) {
+  hover(ndc, touch = false) {
     const top = this.scene.cardsAt(ndc)[0];
-    this.cb.onPreview(top?.card.key ?? null);                           // a big copy of whatever face-up card the pointer is on
+    if (!touch) this.cb.onPreview(top?.card.key ?? null);              // a big copy of whatever face-up card the pointer is on (a finger on a phone holds still instead: peekAt)
     this.scene.hover = top && top.card.key ? { id: top.card.id } : null;      // any face-up card: a small lift, and its preview
     let useful = !!this.sourceAt(ndc);
     if (this.choice) useful = !!this.optionAt(ndc); else if (this.sel) useful = useful || !!this.targetAt(ndc, this.sel);

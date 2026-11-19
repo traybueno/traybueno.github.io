@@ -5,8 +5,9 @@
  * the result shown when the game is over. Plain DOM over the canvas.
  */
 
-import { createRefCard } from './refcard.js?v=54cfdab';
-import { screenFrame, chainBackdrop, cardFan, ornament } from './title.js?v=54cfdab';
+import { createRefCard } from './refcard.js?v=ad16557';
+import { screenFrame, chainBackdrop, cardFan, ornament } from './title.js?v=ad16557';
+import { enterGame, leaveGame } from './phone.js?v=ad16557';
 
 /** `faceOf(key)` is the finished face of a card (the canvas the table's card is textured from), so the preview shows the same words. */
 export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
@@ -127,8 +128,8 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
         }, VEIL_IN + VEIL_HOLD);
       };
       const go = button('go', 'Start game', null, true);
-      go.addEventListener('click', () => leave(() => onStart(chosen)));
-      const learn = button('go', 'Learn to play', null, true); learn.addEventListener('click', () => { onClose = null; stack.length = 0; leave(() => onLearn?.()); });
+      go.addEventListener('click', () => { enterGame(); leave(() => onStart(chosen)); });
+      const learn = button('go', 'Learn to play', null, true); learn.addEventListener('click', () => { enterGame(); onClose = null; stack.length = 0; leave(() => onLearn?.()); });
       const links = el('div', 'tlinks'), sl = el('button', 'plink', 'Settings'), dl = el('button', 'plink', 'Developer tools'); sl.type = dl.type = 'button';
       sl.addEventListener('click', () => { onClose = null; stack.length = 0; settingsPanel(settings); });
       dl.addEventListener('click', () => { onClose = null; stack.length = 0; panels.open('Developer tools', column(dev), backBtn()); });
@@ -138,7 +139,7 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
       const mains = el('div', 'tmain'); mains.append(go, learn);
       body.append(name, cardFan(faceUrl), pickRow, mains, links);
       start.className = 'start title-screen';
-      start.replaceChildren(chainBackdrop(), screenFrame(), body); start.hidden = false; menuBtn.hidden = true;
+      start.replaceChildren(chainBackdrop(), screenFrame(), body); start.hidden = false; menuBtn.hidden = true; leaveGame();
       document.removeEventListener('keydown', titleKeys);
       titleKeys = (e) => {
         if (start.hidden || !layer.hidden) return;
@@ -170,8 +171,9 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
       for (const [n, b] of Object.entries(buttons)) { b.hidden = !avail[n]; b.style.animationDelay = `${-(performance.now() % 1500)}ms`; }    // every button blinks in step
     },
     hint(text, { prompt = false } = {}) { hint.textContent = text || ''; hint.style.opacity = text ? 1 : 0; if (text) hint.classList.toggle('prompt', prompt); },      // `prompt`: what to tap next, shown as a banner on the table's middle line
-    /** A big copy of the card the pointer is on (null to hide it). */
-    preview(key) {
+    /** A big copy of the card the pointer is on (null to hide it). `right`: show it at the right edge (on a phone, away from the finger holding the card). */
+    preview(key, right = false) {
+      preview.classList.toggle('right', !!key && right);
       if (key === shown) return; shown = key;
       if (key) { previewImg.src = faceUrl(key); refcard.classList.remove('open'); }      // the preview shows where the open reference card would be
       preview.classList.toggle('on', !!key);
