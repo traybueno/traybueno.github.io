@@ -5,28 +5,28 @@
  *   spell     wound into your Chain with the Chain action (Fireball, Shift, Behind You, Shadow Step)
  *   instant   played from your hand for free, any time on your turn (Rally, Witch's Kiss)
  *   heart     one per player, never in a deck
- * `instant: true` marks an instant creature (the Lantern Keeper): it is deployed like an instant, any time on your turn, without the Field action; it is a creature in every other way.
+ * `instant: true` marks an instant creature (the Lantern Keeper, and the Maniac since 19 Nov 2026): it is deployed like an instant, any time on your turn, without the Field action; it is a creature in every other way.
  * `attacks: true` marks the creatures that can attack. Everything else about a card is in rules.js.
  */
 export const CARDS = {
   heart: { name: 'Heart', kind: 'heart', text: 'The first attack that lands turns it spent and defeats the attacker. The next one defeats it, and you lose.' },
   knight: { name: 'Knight', kind: 'creature', attacks: true, text: 'Attacks twice while another of your Knights is in play.' },
-  maniac: { name: 'Maniac', kind: 'creature', attacks: true, text: 'Enters spent. Attacks twice.' },
+  maniac: { name: 'Maniac', kind: 'creature', instant: true, attacks: true, text: 'Enters spent. Attacks twice.' },
   guardian: { name: 'Guardian', kind: 'creature', text: 'Enters on one of your cards and guards it.' },
   angel: { name: 'Angel', kind: 'creature', text: 'While it’s ready, an attack on your Heart defeats this instead.' },
-  lantern: { name: 'Lantern Keeper', kind: 'creature', instant: true, text: 'While it’s ready, your other spent creatures are guarded and can still attack.' },
+  lantern: { name: 'Lantern Keeper', kind: 'creature', instant: true, text: 'While it’s ready, your other spent cards are guarded, and your spent creatures can still attack.' },
   portal: { name: 'Warp Portal', kind: 'device', text: 'Your attacks can hit guarded cards. Only spells can hit this.' },
-  resolve: { name: 'Heaven’s Resolve', kind: 'device', text: 'Recover doesn’t use your Field action.' },
+  resolve: { name: 'Heaven’s Resolve', kind: 'device', text: 'Recover doesn’t use your Field action, and readies all your creatures.' },
   fireball: { name: 'Fireball', kind: 'spell', text: 'Hit any card except a Heart.' },
   shift: { name: 'Shift', kind: 'spell', text: 'Return an enemy Guardian, or a spell in the enemy’s Chain, to its owner’s hand.' },
   behind: { name: 'Behind You', kind: 'spell', text: 'Hit every creature, yours too.' },
   shadow: { name: 'Shadow Step', kind: 'spell', text: 'A Knight or Maniac of yours attacks for free, even if spent.' },
   rally: { name: 'Rally', kind: 'instant', text: 'Ready one of your spent creatures.' },
-  kiss: { name: 'Witch’s Kiss', kind: 'instant', text: 'Take a card from any discard pile or Chain and play it free, ready. A spell goes to your hand.' },
+  kiss: { name: 'Witch’s Kiss', kind: 'instant', text: 'Take a card other than a Witch’s Kiss from any discard pile or the enemy’s Chain and play it free, ready. A spell goes to your hand.' },
 };
 
-/** The deck each player shuffles: 25 cards. Each player also starts with a Heart and a Guardian guarding it, both outside the deck. */
-export const DECK = { knight: 4, maniac: 1, guardian: 2, angel: 2, lantern: 1, portal: 1, resolve: 1, fireball: 3, shift: 2, behind: 2, shadow: 2, rally: 2, kiss: 2 };
+/** The deck each player shuffles: 26 cards (a second Lantern Keeper since 19 Nov 2026). Each player also starts with a Heart and a Guardian guarding it, both outside the deck. */
+export const DECK = { knight: 4, maniac: 1, guardian: 2, angel: 2, lantern: 2, portal: 1, resolve: 1, fireball: 3, shift: 2, behind: 2, shadow: 2, rally: 2, kiss: 2 };
 
 /** Cards each player draws at the start of the game. */
 export const HAND_SIZE = 5;
@@ -45,7 +45,7 @@ export const REFERENCE = {
     steps: [
       { topic: 'draw', name: 'Draw', text: 'Draw a card.' },
       { topic: 'actions', text: 'One of each, in either order, or skip either.', actions: [
-        { topic: 'field', name: 'Field', options: ['Deploy', 'Attack', 'Move a Guardian', 'Recover (ready your spent Knights and Maniacs)'] },
+        { topic: 'field', name: 'Field', options: ['Deploy', 'Attack', 'Recover (ready your spent Knights and Maniacs)'] },
         { topic: 'chain', name: 'Chain', options: ['Wind (a spell into the next free slot)', 'Release: top to bottom, I then II then III, skip any you like'] },
       ] },
       { topic: 'end', name: 'End', text: 'End your turn.' },
@@ -60,7 +60,7 @@ export const REFERENCE = {
       { topic: 'attack', text: 'Only Knights and Maniacs attack. “Attacks twice”: the second comes straight after, nothing between.' },
       { topic: 'spent', text: 'A spent creature can’t attack or move until it is readied. Recover readies Knights and Maniacs; only Rally readies other creatures.' },
       { topic: 'device', text: 'Devices enter spent.' },
-      { topic: 'guard', text: 'A guarded card can’t be hit by attacks or spells. A Guardian guards the card it is on; Guardians are never guarded. If that card leaves play, its Guardian returns to your hand.' },
+      { topic: 'guard', text: 'A guarded card can’t be hit by attacks or spells. A Guardian guards the card it is on; Guardians are never guarded. Once on your turn, a ready Guardian may move to another of your cards. If that card leaves play, its Guardian returns to your hand.' },
       { topic: 'pile', text: 'With your pile empty, you have no Guardians.' },
     ],
     goal: { topic: 'heart', text: 'Defeat the enemy Heart.' },

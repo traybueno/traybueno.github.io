@@ -80,8 +80,8 @@ export function layout(view, viewer, { gather = null, order = null, gap = null, 
     const half = (c) => (c.spent ? CARD_H : CARD_W) * BOARD_SCALE / 2;                     // a spent card is turned, so it is wider
     const over = (c) => Math.max(0, ...guardiansOn(c.id).map((g, j) => guardOffset(g, j) + guardHalf(g) - half(c)));   // how far its Guardians reach past its right edge
 
-    // The row. The Heart stays in the middle, and the rest stand either side of it in the order the player put them (a card dropped on the field goes where it was
-    // dropped). Each card is placed clear of its neighbour and of the Guardians resting on it; if the row would reach too far, it is squeezed evenly.
+    // The row. The rest stand either side of the Heart in the order the player put them (a card dropped on the field goes where it was
+    // dropped), and the whole row is then centred. Each card is placed clear of its neighbour and of the Guardians resting on it; if the row would reach too far, it is squeezed evenly.
     const seq = sequence(row, heart, order?.[P.idx]), open = gap && gap.owner === P.idx ? Math.max(0, Math.min(seq.length, gap.index)) : -1;
     const standing = [...seq];                                                          // (the Heart's place among them, before a gap is held open)
     if (open >= 0) seq.splice(open, 0, GAP);
@@ -93,7 +93,11 @@ export function layout(view, viewer, { gather = null, order = null, gap = null, 
     let right = heart ? half(heart) + over(heart) : 0, left = heart ? -half(heart) : 0;
     for (const c of rights) { const px = right + ROW_GAP + sz(c); x.set(c.id, px); right = px + sz(c) + (c.gap ? 0 : over(c)); }
     for (const c of lefts) { const px = left - ROW_GAP - sz(c) - (c.gap ? 0 : over(c)); x.set(c.id, px); left = px - sz(c); }
-    const squeeze = Math.min(1, ROW_REACH / Math.max(right, -left, 1));
+    // The whole row is centred on the table, so it stays even however many cards stand on either side of the Heart: when cards leave one side, the rest
+    // slide over to fill the room (the Heart with them), and nothing is pushed together while there is space. Cards keep the order the player put them in.
+    const mid = (right + left) / 2;
+    for (const [id, px] of x) x.set(id, px - mid);
+    const squeeze = Math.min(1, ROW_REACH / Math.max((right - left) / 2, 1));
     rows[P.idx] = standing.map((c) => ({ id: c.id, x: x.get(c.id) * squeeze }));
     const spot = new Map();                                                            // card id -> its centre
     for (const c of [heart, ...row].filter(Boolean)) {

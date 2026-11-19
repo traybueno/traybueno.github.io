@@ -4,7 +4,7 @@
  * never look like geometry. They fade in over a moment while settling a few pixels inward; the one under the pointer turns white and lengthens slightly.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=a027ba8';
+import { CARD_W, CARD_H } from './layout.js?v=54cfdab';
 
 const ARM = 11, ARM_FOCUS = 15, GAP = 3, GAP_FROM = 9, FADE_IN = 0.11, FADE_OUT = 0.09;
 const COLOR = { idle: '#efe7c6', idleRgb: [239, 231, 198], focus: '#ffffff' };
@@ -64,6 +64,13 @@ export class Overlay {
    *   dots   the dotted glow round the Lantern Keeper's lantern, spreading across the table from (x, z) to `r`
    *   shaft  a slanting beam of light coming down onto (x, z) from the upper left, as in Heaven's Resolve's picture
    *   embers a few pixels drifting down from (x, z) and going out (a Lantern Keeper's light going out)
+   *   pring  a shockwave as a ring of square pixels spreading out from (x, z) to `r`, dithered as it thins (a Chain let go, a blow)
+   *   bolt   a jagged charge of pixels running from (x, z) to (x2, z2) at height `y` (one Chain slot to the next)
+   *   comet  a ball of pixels flying from (x, y, z) to (x2, y2, z2) with a trail of embers falling behind it (a Fireball)
+   *   burst  `n` pixels thrown out from (x, y, z) that slow, fall and go out (`speed`, `grav`, `sway`: px); `color2` alternates (impact, shattering, feathers)
+   *   wave   a band of dithered pixels sweeping across the table from x0 to x1 over z0..z1 (Behind You)
+   *   crack  jagged lines of pixels splitting out from (x, z) (a Heart that takes its first blow)
+   *   hearts a few little pixel hearts floating up from (x, y, z) and going out (a Witch's Kiss)
    */
   pixel(kind, x, z, o = {}) { this.px.push({ kind, x, z, t: 0, dur: 0.9, color: '#ffffff', r: 2, ...o, seed: Math.random() * 1000 }); }
   /** The target's four corners on screen, clockwise from the top left, or null if it is not there. */
@@ -124,7 +131,7 @@ export class Overlay {
   idleMarks() {
     const sc = this.scene, out = [];
     for (const [dev, d] of sc.idle ?? []) {
-      const on = (kind, card, i = 0) => { const w = d.w * sc.idleOf(dev, card); if (w > 0.01) out.push({ idle: kind, card, w, color: d.color, i, dev }); };
+      const up = sc.lifted?.has(dev) ? 1.6 : 1, on = (kind, card, i = 0) => { const w = Math.min(1, d.w * sc.idleOf(dev, card) * (card === dev || card === sc.hover?.id ? up : 1)); if (w > 0.01) out.push({ idle: kind, card, w, color: d.color, i, dev }); };
       if (d.key === 'angel') { on('heart', d.ids[0]); continue; }
       on(d.key, dev);
       d.ids.forEach((id, i) => on({ portal: 'thin', lantern: 'lit', resolve: 'mote' }[d.key], id, i));
@@ -294,6 +301,71 @@ export class Overlay {
         for (let i = 0; i < 7; i++) {                           // motes rising at the foot of the beam
           const h = ((u * 1.6 + i / 7 + (b.seed % 1)) % 1), [px, py] = at(b.x + Math.sin(i * 2.3 + b.seed) * 0.7, b.z + Math.cos(i * 1.7) * 0.4, 0.2 + h * 1.6);
           g.globalAlpha = fade * (1 - h); sq(px, py);
+        }
+      } else if (b.kind === 'pring') {
+        const R = b.r * ease(u), N = Math.max(24, Math.round(b.r * 14));
+        for (const [k, a0, sz] of [[1, 1, P], [0.68, 0.45, 2]]) {
+          if (R * k < 0.1) continue;
+          for (let i = 0; i < N; i++) {
+            if (u > 0.45 && (i + Math.floor(u * 10)) % 3 === 0) continue;
+            const th = i / N * Math.PI * 2, [px, py] = at(b.x + Math.cos(th) * R * k, b.z + Math.sin(th) * R * k, 0.12);
+            g.globalAlpha = a0 * (1 - u) * (b.alpha ?? 1); sq(px, py, sz);
+          }
+        }
+      } else if (b.kind === 'bolt') {
+        const head = Math.min(1, u / 0.6), tail = Math.max(0, (u - 0.3) / 0.7), [ax, ay] = at(b.x, b.z, b.y ?? 1), [bx, by] = at(b.x2, b.z2, b.y ?? 1);
+        const len = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(len / P)), [nx, ny] = unit(ay - by, bx - ax);
+        for (let i = Math.floor(tail * n); i <= head * n; i++) {
+          const s = i / n, j = Math.round(Math.sin(s * 23 + b.seed) * 1.6 + Math.sin(s * 57 + b.seed * 2) * 0.9) * P * Math.sin(Math.PI * s);
+          g.globalAlpha = (0.45 + 0.55 * (s - tail) / Math.max(0.01, head - tail)) * (1 - tail); sq(ax + (bx - ax) * s + nx * j, ay + (by - ay) * s + ny * j, i === Math.floor(head * n) ? P * 2 : P);
+        }
+      } else if (b.kind === 'comet') {
+        const lerp = (s) => at(b.x + (b.x2 - b.x) * s, b.z + (b.z2 - b.z) * s, b.y + (b.y2 - b.y) * s), h = Math.min(1, u / 0.8), fade = u < 0.8 ? 1 : 1 - (u - 0.8) / 0.2;
+        for (let i = 0; i < 22; i++) {                          // embers shed along the way, drifting down and going out
+          const s = (i + 0.5) / 22; if (s > h) break;
+          const age = (h - s) * 2, [px, py] = lerp(s), r1 = Math.sin(b.seed + i * 7.1);
+          if (age > 1) continue; g.globalAlpha = (1 - age) * 0.8; g.fillStyle = i & 1 ? b.color : (b.color2 ?? b.color); sq(px + r1 * 6, py + age * 18 + Math.cos(i * 3.3) * 4, age < 0.4 ? P : 2);
+        }
+        if (h < 1) {
+          const [hx, hy] = lerp(h), [tx, ty] = lerp(Math.max(0, h - 0.08)), [dx, dy] = unit(hx - tx, hy - ty);
+          for (let k = 1; k < 9; k++) { g.globalAlpha = 0.9 * (1 - k / 9); g.fillStyle = k & 1 ? b.color : (b.color2 ?? b.color); sq(hx - dx * k * P * 1.6 + Math.sin(k * 2.7 + b.seed) * 3, hy - dy * k * P * 1.6, k < 3 ? P * 3 : k < 6 ? P * 2 : P); }
+          g.globalAlpha = fade; g.fillStyle = b.color; sq(hx, hy, P * 5); g.fillStyle = b.color2 ?? b.color; sq(hx, hy, P * 3); g.fillStyle = b.core ?? '#fff6d0'; sq(hx, hy, P * 1.5);
+        }
+        g.fillStyle = b.color;
+      } else if (b.kind === 'burst') {
+        const [cx, cy] = at(b.x, b.z, b.y ?? 0.5), n = b.n ?? 18;
+        for (let i = 0; i < n; i++) {
+          const r1 = frac(Math.sin(b.seed + i * 12.9898) * 43758.5453), r2 = frac(Math.sin(b.seed * 1.7 + i * 78.233) * 12345.678), th = r1 * Math.PI * 2, sp = (b.speed ?? 70) * (0.4 + 0.6 * r2);
+          const life = Math.min(1, u * (1 + r2 * 0.6)); if (life >= 1) continue;
+          const go = 1 - Math.pow(1 - life, 2), x = cx + Math.cos(th) * sp * go + Math.sin(life * 6 + i) * (b.sway ?? 0), y = cy + Math.sin(th) * sp * go * 0.7 + (b.grav ?? 40) * life * life - (b.rise ?? 0) * go;
+          if (life > 0.5 && (i + Math.floor(u * 16)) % 4 === 0) continue;   // they flicker as they go out
+          g.globalAlpha = 1 - life; g.fillStyle = b.color2 && i & 1 ? b.color2 : b.color; sq(x, y, i < (b.big ?? 4) && life < 0.5 ? P * 2 : P);
+        }
+        g.fillStyle = b.color;
+      } else if (b.kind === 'wave') {
+        const bx = b.x0 + (b.x1 - b.x0) * u, w = b.w ?? 1.8, step = 0.42;
+        for (let wx = Math.ceil((bx - w) / step) * step; wx <= bx + w * 0.4; wx += step) for (let wz = b.z0; wz <= b.z1; wz += step) {
+          const d = wx - bx, k = d > 0 ? 1 - d / (w * 0.4) : 1 + d / w, row = Math.round(wz / step), col = Math.round(wx / step);
+          if (k <= 0 || (k < 0.55 && (row + col) & 1) || (k < 0.25 && row & 1)) continue;
+          const [px, py] = at(wx, wz, 0.2); g.globalAlpha = Math.min(1, k * 1.2) * (u > 0.85 ? (1 - u) / 0.15 : 1) * 0.75; sq(px, py, k > 0.7 ? P * 2 : P);
+        }
+      } else if (b.kind === 'crack') {
+        const grow = ease(Math.min(1, u / 0.25)), fade = u < 0.5 ? 1 : 1 - (u - 0.5) / 0.5, [cx, cy] = at(b.x, b.z, 0.2);
+        for (let ray = 0; ray < (b.n ?? 6); ray++) {
+          let x = cx, y = cy, th = (ray / (b.n ?? 6)) * Math.PI * 2 + Math.sin(b.seed + ray) * 0.5; const steps = 9;
+          for (let i = 0; i < steps * grow; i++) {
+            th += Math.sin(b.seed * 3 + ray * 7 + i * 2.1) * 0.6; x += Math.cos(th) * P * 1.6; y += Math.sin(th) * P * 1.6;
+            g.globalAlpha = fade * (1 - i / steps * 0.6); sq(x, y, i < 3 ? P * 1.5 : P);
+          }
+        }
+        g.globalAlpha = fade * (1 - u); sq(cx, cy, P * 4);
+      } else if (b.kind === 'hearts') {
+        const [cx, cy] = at(b.x, b.z, b.y ?? 1), shape = ['.X.X.', 'XXXXX', 'XXXXX', '.XXX.', '..X..'];
+        for (let i = 0; i < 5; i++) {
+          const life = (u - i * 0.1) / 0.75; if (life <= 0 || life >= 1) continue;
+          const s = 4, ox = cx + Math.sin(b.seed + i * 2.4) * 50 + Math.sin(life * 5 + i) * 6, oy = cy - (b.lift ?? 90) - life * 80;
+          g.globalAlpha = (1 - life) * Math.min(1, life * 6);
+          shape.forEach((row, r) => [...row].forEach((ch, k) => { if (ch === 'X') g.fillRect(Math.round(ox + (k - 2) * s), Math.round(oy + (r - 2) * s), s, s); }));
         }
       } else if (b.kind === 'embers') {
         for (let i = 0; i < 9; i++) {

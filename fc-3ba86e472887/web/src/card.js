@@ -5,7 +5,7 @@
  * `aim` sets where it should be (a placement from layout.js plus any hover or drag change); each frame `update` carries it there.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=a027ba8';
+import { CARD_W, CARD_H } from './layout.js?v=54cfdab';
 
 const R = 0.14;
 function rounded(w, h, r) {
@@ -38,7 +38,8 @@ export const SPRING = { settle: crit(520), follow: crit(1400), hover: crit(1000)
 /**
  * The veil: a layer of big square pixels over a card's face, in a device's colour, for the moments a device touches a card. The pixels sit on a grid near the
  * art's own pixel size and fill in with the art's checkerboard shading at partial cover. `uAmount` (0 to 1) is how much of the face is covered; `uShape` how
- * the cover spreads: 0 scattered, 1 a swirl (the Warp Portal), 2 from the edges in (the Lantern Keeper), 3 a band rising up the card (Heaven's Resolve).
+ * the cover spreads: 0 scattered, 1 a swirl (the Warp Portal), 2 from the edges in (the Lantern Keeper), 3 a band rising up the card (Heaven's Resolve),
+ * 4 a heart growing out from the middle (a Witch's Kiss), a few of its pixels left open so the art shows through.
  */
 const VEIL = {
   vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -53,7 +54,12 @@ const VEIL = {
       else if (uShape < 1.5) { float a = atan(d.y, d.x) / 6.2832 + 0.5, r = length(d); g = mix(fract(a * 3.0 - r * 2.2 + uSpin), r * 1.3, 0.35); }
       else if (uShape < 2.5) { float e = min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y) * 1.5) * 2.0; g = clamp(e, 0.0, 1.0); }
       else g = 0.0;
-      if (uShape > 2.5) { float band = abs(c.y - (uAmount * 1.4 - 0.2)); on = step(band, 0.05 + 0.09 * n) * (1.0 - checker * step(0.04, band)); }
+      if (uShape > 3.5) {
+        vec2 q = d / max(0.001, uAmount * 0.42); q.y -= 0.1;              // two round lobes over a point, like the heart in the art
+        bool inside = length(q - vec2(-0.5, 0.3)) < 0.52 || length(q - vec2(0.5, 0.3)) < 0.52 || (q.y <= 0.3 && q.y >= -1.0 && abs(q.x) <= (q.y + 1.0) * 0.78);
+        on = inside ? 1.0 - checker * step(n, 0.12) : 0.0;
+      }
+      else if (uShape > 2.5) { float band = abs(c.y - (uAmount * 1.4 - 0.2)); on = step(band, 0.05 + 0.09 * n) * (1.0 - checker * step(0.04, band)); }
       else on = step(mix(n, g, 0.65) + checker * 0.12, uAmount * 1.15);
       if (on < 0.5) discard;
       gl_FragColor = vec4(uColor * (0.85 + 0.25 * checker), uAlpha * (0.8 + 0.2 * checker));

@@ -3,9 +3,9 @@
  * accepted. A drop on a legal target makes that move (asking a second question in place if the move is not yet complete); a drop anywhere else lets
  * the card go back where it came from.
  */
-import { CARDS, isGuarded, locate } from '../../src/index.js?v=a027ba8';
-import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=a027ba8';
-import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=a027ba8';
+import { CARDS, isGuarded, locate } from '../../src/index.js?v=54cfdab';
+import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=54cfdab';
+import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=54cfdab';
 
 const MOVE_PX = 7;
 const inRect = (p, r, m = 0.5) => Math.abs(p.x - r.x) <= r.w / 2 + m && Math.abs(p.z - r.z) <= r.d / 2 + m;
@@ -226,7 +226,10 @@ export class Input {
       }
       this.hintText = this.gathered ? `${nameOf(view, this.sel)}: click the card to take.` : promptFor(view, this.sources.get(this.sel), this.seat);
     } else {
-      for (const id of this.sources.keys()) card(id, 'ready');            // on your turn, whatever can be moved is marked, and the marks pulse gently
+      // on your turn, whatever can be moved is marked, and the marks pulse gently. A Guardian that can only be moved (its one free move a turn, since 19 Nov 2026)
+      // is marked only while something else is on offer too, so once both actions and the instants are done the table goes quiet: the turn is yours to end.
+      const onlyMoves = (id) => this.sources.get(id).every((m) => m.type === 'reguard'), more = [...this.sources.keys()].some((id) => !onlyMoves(id));
+      for (const id of this.sources.keys()) if (more || !onlyMoves(id)) card(id, 'ready');
       this.hintText = '';
     }
     sc.picked = this.choice?.src ?? this.sel ?? null;                   // the card picked up stands up above its place until the exchange ends

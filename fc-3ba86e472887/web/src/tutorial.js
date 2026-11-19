@@ -15,7 +15,7 @@
  * A board names cards per seat: `field`, `hand`, `chain`, `discard`, `draws` (in the order they will be drawn), `spentHeart`. A field entry is `key`,
  * `key:spent`, `key>heart` (a Guardian on its Heart) or `key>N` (a Guardian on the Nth card of that field, from 1), and `:spent` may follow either.
  */
-import { newGame, legalMoves, locate } from '../../src/index.js?v=a027ba8';
+import { newGame, legalMoves, locate } from '../../src/index.js?v=54cfdab';
 
 /** Card ids keep the engine's form `<seat>-<key>-<n>` (match.js `keyOf` reads the key from it). */
 let made = 0;
@@ -39,7 +39,7 @@ export function buildLesson(story) {
     for (const key of [...(b.draws?.[seat] ?? [])].reverse()) p.deck.push(card(seat, key));       // the top of the pile is the end of the array
     if ((b.spentHeart ?? []).includes(seat)) p.hearts[0].spent = true;
   }
-  g.turn = 0; g.turnNumber = 1; g.phase = 'play'; g.winner = null; g.used = { field: false, chain: false }; delete g.bonus;
+  g.turn = 0; g.turnNumber = 1; g.phase = 'play'; g.winner = null; g.used = { field: false, chain: false, guard: false }; delete g.bonus;
   g.events = g.players.flatMap((p) => p.hand.map((c) => ({ t: 'draw', id: c.id, p: p.idx })));     // the hands are dealt as a game's are (for the front end's motion)
   legalMoves(g);
   return g;
@@ -96,12 +96,13 @@ export const STORY = {
 
     chapter('Defend'),
     tell('The opponent deployed a Knight. Your Heart has no Guardian, so their Knight could attack it.'),
-    step('Drag your Guardian onto your Heart.', (m, g) => m.type === 'deploy' && m.targetId === g.players[0].hearts[0].id),
-    step('Keep the Fireball for now. Press End Turn.', is('end')),
+    step('Drag your Guardian onto one of your Knights to guard it.', (m, g) => m.type === 'deploy' && keyAt(g, m.cardId) === 'guardian' && keyAt(g, m.targetId) === 'knight'),
+    step('Once each turn, moving a ready Guardian is free. Drag it from the Knight onto your Heart.', is('reguard', (m, g) => m.targetId === g.players[0].hearts[0].id)),
+    step('Where your Guardians stand when you end your turn is what the opponent faces. Keep the Fireball for now. Press End Turn.', is('end')),
     wait('The opponent’s turn. Watch their Knight.'),
 
     chapter('Spent'),
-    tell('Their Knight couldn’t reach your Heart, so it hit your Guardian. Sideways means spent: your Guardian still guards, but one more hit defeats it.'),
+    tell('Their Knight couldn’t reach your Heart, so it hit your Guardian. Sideways means spent: your Guardian still guards, but it can’t move, and one more hit defeats it.'),
     tell('Their Knight is spent too: attacking spends the attacker.'),
     step('Press Release to play your Chain.', is('release')),
     step('Drag the Fireball onto the opponent’s spent Knight. A hit on a spent card defeats it.', is('fireball', (m, g) => keyAt(g, m.targetId) === 'knight')),

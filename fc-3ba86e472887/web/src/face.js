@@ -3,7 +3,7 @@
  * edited in `src/cards.js` and nothing else. The lettering matches the original printed cards: a slab serif drawn in the card's frame colour, centred in the
  * title bar, the type bar and the text box, with the same stepped pixel edge as the art.
  */
-import { CARDS } from '../../src/index.js?v=a027ba8';
+import { CARDS } from '../../src/index.js?v=54cfdab';
 
 export const FONT = { family: 'Roboto Slab', weights: [500, 700] };
 const WEIGHT = { title: 700, type: 500, body: 500 }, SPACING = { title: 1, type: 3, body: 2 };
@@ -18,7 +18,7 @@ const BODY = { maxW: 740, maxH: 290, top: 63, floor: 40, pitch: 1.18, lift: 12 }
 
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 /** The type line of a card, or null for a card that prints none (the Heart). */
-export const typeLine = (card) => (card.kind === 'heart' ? null : (card.instant ? 'Instant ' : '') + cap(card.kind));      // the Lantern Keeper prints "Instant Creature"
+export const typeLine = (card) => (card.kind === 'heart' ? null : (card.instant ? 'Instant ' : '') + cap(card.kind));      // the Lantern Keeper and the Maniac print "Instant Creature"
 
 /** The frame colour of a blank: the average of its brightest pixels along the top border. */
 function frameColour(img) {

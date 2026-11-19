@@ -3,13 +3,13 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=a027ba8';
-import { Table } from './table.js?v=a027ba8';
-import { Overlay } from './overlay.js?v=a027ba8';
-import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=a027ba8';
-import { Fx } from './fx.js?v=a027ba8';
-import { protector, inForce, affects } from '../../src/index.js?v=a027ba8';
-import { portalPulse } from './overlay.js?v=a027ba8';
+import { Card, SPRING } from './card.js?v=54cfdab';
+import { Table } from './table.js?v=54cfdab';
+import { Overlay } from './overlay.js?v=54cfdab';
+import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=54cfdab';
+import { Fx } from './fx.js?v=54cfdab';
+import { protector, inForce, affects } from '../../src/index.js?v=54cfdab';
+import { portalPulse } from './overlay.js?v=54cfdab';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 
@@ -38,6 +38,7 @@ export class Scene {
     this.idle = new Map();                                  // device id -> { key, ids, color, w }: a standing effect in force and the cards it acts on; w eases 0..1 (it fades in and out)
     this.quiet = new Map();                                 // card id -> 0..1: 0 while the move playing now moves or marks that card (its idle effect steps aside), back to 1 after
     this.idleT = 0;                                         // the idle effects' shared clock (a Keeper and the creatures it lights flicker on the same beat)
+    this.lifted = new Set();                                // the cards raised because the hovered card is under their standing effect (see step)
     this.haloHold = new Set();                              // Hearts whose ring stays a moment longer (an Angel is about to be defeated saving them)
     this.camBase = new THREE.Vector3(); this.cam = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, tx: 0, ty: 0, tz: 0, k: 220 };   // a small push on the camera
     this.fx = new Fx(this);
@@ -78,6 +79,7 @@ export class Scene {
    * `events` are the events of the move that led here (from the same view): they say how the cards got where they are, and the motion plays from them.
    */
   show(view, viewer, { snap = false, gather = null, held = null, events = null } = {}) {
+    if (gather?.length) this.lastGather = gather;           // the cards a Witch's Kiss laid out: the move that takes one fades the others back (fx.js)
     this.view = view; this.viewer = viewer; this.gather = gather; this.held = held; this.gap = null;
     const order = this.row.map((r) => r.map((e) => e.id));
     if (this.placing) {                                      // a card dropped on the field takes the place it was dropped at, among the cards already standing
@@ -102,7 +104,7 @@ export class Scene {
   }
   haloIds() { return new Set(); }                          // the thin standing-effect outline is switched off for now (the effect rings that flash when something happens are separate)
   /** Remove every card (a new game). */
-  clear() { for (const c of this.cards.values()) this.scene.remove(c.root); this.cards.clear(); this.poses = new Map(); this.row = [[], []]; this.placing = this.gap = null; this.fx.flush(); this.hover = this.drag = this.press = this.picked = null; }
+  clear() { for (const c of this.cards.values()) this.scene.remove(c.root); this.cards.clear(); this.poses = new Map(); this.row = [[], []]; this.placing = this.gap = this.lastGather = null; this.fx.flush(); this.hover = this.drag = this.press = this.picked = null; }
   /**
    * While a creature is carried over the field: the cards in `owner`'s row open a gap where it would go if dropped with its centre at `x` (as the owner sees
    * the table), and close up again for `null`. Only the row moves; nothing else is laid out again.
@@ -150,15 +152,20 @@ export class Scene {
       else Object.assign(p, { y: b.y + 0.3, scale: b.scale * 1.04 });
       c.boost = 1000;
     }
+    else if (this.lifted.has(c.id)) { Object.assign(p, { y: b.y + 0.55, scale: b.scale * 1.06 }); c.boost = 900; }     // a card whose standing effect acts on the hovered card rises with it
     return p;
   }
   /** Advance every card's motion by `dt` seconds. */
   step(dt) {
     this.fx.update(dt); this.table.update(dt); this.moveCamera(dt);
     this.stepIdle(dt);
+    // Hovering a card raises the cards whose standing effects act on it now (engine `affects`, via the idle list): the Lantern Keeper lighting a spent
+    // creature, the Heaven's Resolve behind an attacker, the enemy Warp Portal a Guardian no longer stops, the Angel guarding a Heart.
+    const h = !this.drag && !this.picked ? this.hover?.id : null;
+    this.lifted = new Set(h ? [...this.idle].filter(([id, d]) => !d.gone && id !== h && d.ids.includes(h)).map(([id]) => id) : []);
     for (const c of this.cards.values()) {
       if (!c.base) continue;
-      c.aim(this.poseOf(c), this.drag?.id === c.id ? SPRING.follow : c.held ? c.held.spring : this.hover?.id === c.id ? SPRING.hover : SPRING.settle);
+      c.aim(this.poseOf(c), this.drag?.id === c.id ? SPRING.follow : c.held ? c.held.spring : this.hover?.id === c.id || this.lifted.has(c.id) ? SPRING.hover : SPRING.settle);
       if (this.drag?.id === c.id) { c.s.x.x = c.s.x.t; c.s.z.x = c.s.z.t; c.s.x.v = c.s.z.v = 0; }      // a carried card sits exactly where the pointer puts it: no lag
       c.update(dt, this.camera.quaternion);
     }

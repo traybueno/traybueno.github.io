@@ -6,8 +6,8 @@
  *   build(scenario)  the position, as a game state (seat 0 is the viewer; some scenarios are the opponent's turn)
  *   SCENARIOS        [{ id, group, name, setup, after, turn, steps }]
  */
-import { newGame, legalMoves, apply } from '../../src/index.js?v=a027ba8';
-import { prepare } from './match.js?v=a027ba8';
+import { newGame, legalMoves, apply } from '../../src/index.js?v=54cfdab';
+import { prepare } from './match.js?v=54cfdab';
 
 export const SEED = 5;
 
@@ -50,7 +50,8 @@ export const SCENARIOS = [
   { id: 'defeat', group: 'Combat', name: 'Attack defeats a spent creature', after: (g) => spent(g, 1, 'knight'), setup: { ...OPEN, field: { 0: OPEN.field[0], 1: ['knight', 'knight'] } }, steps: [move('attack', (m, g) => foe(g, m.targetId, 'knight')), maybe(move('decline'))] },
   { id: 'heart', group: 'Combat', name: 'Attack the Heart', after: bare, setup: OPEN, steps: [move('attack', (m, g) => key(g, m.targetId) === 'heart'), maybe(move('decline'))] },
   { id: 'rescue', group: 'Combat', name: 'An Angel saves the Heart', after: bare, setup: { ...OPEN, field: { 0: OPEN.field[0], 1: ['angel', 'knight'] } }, steps: [move('attack', (m, g) => key(g, m.targetId) === 'heart'), maybe(move('decline'))] },
-  { id: 'win', group: 'Combat', name: 'The Heart falls (win)', after: bare, setup: { ...OPEN, spentHeart: [1] }, steps: [move('attack', (m, g) => key(g, m.targetId) === 'heart')] },
+  // the Heart falls: no ready Lantern Keeper on that side, which would light the spent Heart (19 Nov 2026)
+  { id: 'win', group: 'Combat', name: 'The Heart falls (win)', after: bare, setup: { ...OPEN, field: { 0: OPEN.field[0], 1: ['knight', 'knight'] }, spentHeart: [1] }, steps: [move('attack', (m, g) => key(g, m.targetId) === 'heart')] },
   { id: 'portal', group: 'Combat', name: 'Attack through a Warp Portal', setup: { ...OPEN, field: { 0: ['knight', 'portal'], 1: ['knight', 'lantern'] } }, steps: [doing('attack', (e) => e.t === 'attack' && e.portal), maybe(move('decline'))] },
   // ---- devices: the moments a Warp Portal, a Lantern Keeper and a Heaven's Resolve touch several cards ----
   { id: 'device-portal', group: 'Devices', name: 'Warp Portal comes in', after: guarded(1), setup: { field: { 0: ['knight', 'knight'], 1: ['knight', 'knight', 'guardian'] }, hand: { 0: ['portal'] } }, steps: [move('deploy', (m, g) => key(g, m.cardId) === 'portal')] },

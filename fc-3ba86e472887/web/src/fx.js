@@ -8,9 +8,9 @@
  * ({ x, y, z, yaw, spin, scale, face, dim }); a card that is `held` at a pose goes there, and is handed back to its place when the hold is released.
  */
 import * as THREE from 'three';
-import { CARDS } from '../../src/index.js?v=a027ba8';
-import { SPRING } from './card.js?v=a027ba8';
-import { handSpot, deckSpot } from './layout.js?v=a027ba8';
+import { CARDS } from '../../src/index.js?v=54cfdab';
+import { SPRING } from './card.js?v=54cfdab';
+import { handSpot, deckSpot } from './layout.js?v=54cfdab';
 
 const mix = (a, b, u) => { const o = { ...b }; for (const k of ['x', 'y', 'z', 'spin', 'scale', 'face']) o[k] = (a[k] ?? 0) + ((b[k] ?? 0) - (a[k] ?? 0)) * u; return o; };
 const moved = (a, b) => ['x', 'y', 'z', 'spin', 'face'].some((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) > 0.05) || !!a.dim !== !!b.dim;
@@ -20,7 +20,10 @@ const READ = 0.35;           // a spell that is not yours, or that moves another
 const HOLD = 0.85;           // how long the card a Kiss or a Shift takes is held up beside the spell before it goes
 const LAND = 0.38;           // how long after a card sets off from the hand it has come down in its place
 /** A rough stand-in for a device's colour where the art is not loaded (the tests); on the table the colour is read from the card's own frame. */
-const TINT = { portal: '#c99be8', lantern: '#c8f08c', resolve: '#ffe066' };
+const TINT = { portal: '#c99be8', lantern: '#c8f08c', resolve: '#ffe066', fireball: '#ff8a3c', behind: '#9b86e0', shift: '#7fd3e6', kiss: '#f08fc0', shadow: '#9a7fd0', heart: '#e86a7a', angel: '#f2efe6' };   // used only where the card art has no frame colour (tests)
+const GOLD = '#ffd27a', KISS = '#ff7eb6';
+/** A CSS hex colour taken `k` of the way to black. */
+const darken = (hex, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
 const SHOW = (side) => ({ x: 0, y: side > 0 ? 1.8 : 2.6, z: side > 0 ? 5.2 : -2.2, yaw: 0, spin: 0, scale: 1.2, face: 1, dim: false });     // where a spell is held up while it takes effect (yours a little nearer you, clear of the banner on the middle line)
 
 export class Fx {
@@ -77,19 +80,25 @@ export class Fx {
     });
   }
   /**
-   * A Chain is let go: a flare of light and a shockwave across it, then a charge runs down it from the first spell to the last. Each spell leaps up, flashes,
-   * and rings as the charge reaches it, and the last one lands with a thud the whole table feels. Returns when it is over.
+   * A Chain is let go: a soft flare and a ring of gold pixels across it, then a jagged charge of pixels runs down it from the first spell to the last, each
+   * leg in the colour of the spell it reaches (gold for a card still face down to you). Each spell leaps up, fills in from its edges and throws out a pixel
+   * ring as the charge reaches it; the last one bursts and lands with a thud the whole table feels. Returns when it is over.
    */
-  unleash(ids, live, t) {
+  unleash(ids, live, t, keyOf = () => null) {
     const sc = this.sc, ov = sc.overlay, spots = ids.map((id) => live(id)), mid = { x: spots.reduce((s, p) => s + p.x, 0) / spots.length, z: spots.reduce((s, p) => s + p.z, 0) / spots.length };
-    const at = (p, y = 0.9) => new THREE.Vector3(p.x, y, p.z), toward = Math.sign(mid.x) || 1;
-    this.at(t, () => { ov.glare(mid.x, mid.z, { alpha: 0.2, dur: 0.55 }); ov.shock(mid.x, mid.z, { r: 8, dur: 0.5, width: 2 }); sc.nudge(-toward * 0.1, 0.12); });
+    const toward = Math.sign(mid.x) || 1, col = (id) => { const k = keyOf(id); return k ? this.tint(k) : GOLD; };
+    this.at(t, () => { ov.glare(mid.x, mid.z, { alpha: 0.14, dur: 0.5 }); ov.pixel?.('pring', mid.x, mid.z, { r: 8, dur: 0.55, color: GOLD }); sc.nudge(-toward * 0.1, 0.12); });
     ids.forEach((id, i) => {
-      const ti = t + 0.1 + i * 0.12, p = spots[i], last = i === ids.length - 1;
+      const ti = t + 0.1 + i * 0.12, p = spots[i], last = i === ids.length - 1, color = col(id);
       this.path(id, [[0, 'live'], [ti - 0.05, { ...p, y: p.y + 1.5, scale: p.scale * 1.16, face: 0 }, SPRING.follow], [ti + 0.24, null]]);      // it leaps up as the charge reaches it, then settles back
-      if (i) this.at(ti - 0.07, () => ov.beam(at(spots[i - 1], 1.4), at(p, 1.4), { dur: 0.14, color: '#ffd27a' }));
-      this.glow(id, ti); this.ring({ card: id }, ti, { grow: 0.2, dur: 0.4 }); this.sound(last ? 'clash' : 'tick', ti, p, { step: i * 3 }); this.ring({ card: id }, ti + 0.08, { grow: 0.42, dur: 0.5, alpha: 0.5 });
-      this.at(ti, () => { ov.shock(p.x, p.z, { r: last ? 7 : 4.5, dur: last ? 0.55 : 0.4, width: last ? 3.4 : 2.4 }); sc.nudge(-toward * (last ? 0.18 : 0.06), last ? 0.4 : 0.14); });
+      if (i) { const q = spots[i - 1]; this.at(ti - 0.1, () => ov.pixel?.('bolt', q.x, q.z, { x2: p.x, z2: p.z, y: 1.4, dur: 0.22, color })); }
+      this.glow(id, ti); this.sound(last ? 'clash' : 'tick', ti, p, { step: i * 3 });
+      this.touch(id, ti, 0.45, (c, u) => c.setVeil({ color, shape: 2, amount: 0.7 * Math.sin(Math.PI * u), alpha: 0.85 }));
+      this.at(ti, () => {
+        ov.pixel?.('pring', p.x, p.z, { r: last ? 6.5 : 3.8, dur: last ? 0.6 : 0.45, color });
+        if (last) ov.pixel?.('burst', p.x, p.z, { y: 1.4, n: 26, speed: 110, grav: 60, color, color2: GOLD, dur: 0.8 });
+        sc.nudge(-toward * (last ? 0.18 : 0.06), last ? 0.4 : 0.14);
+      });
     });
     return t + 0.1 + (ids.length - 1) * 0.12 + 0.3;
   }
@@ -168,10 +177,43 @@ export class Fx {
     this.bob(id, t + 0.12, p, 0.4); this.sound('tick', t + 0.12, p, { step: 6 + i * 2, gain: 0.55 });
   }
   /** A Heaven's Resolve comes in: a broad beam falls on it, then on each of your attackers (`ids`) in turn, nearest first. */
+  /** A card is broken: its pixels scatter (card `key`'s colour) as it goes to its pile, and a burst of them is thrown out where it was. */
+  shatter(id, t, p, key) {
+    const color = key ? this.tint(key) : '#efe7c6'; if (!p) return;
+    this.at(t, () => this.sc.overlay.pixel?.('burst', p.x, p.z, { y: 0.5, n: 28, speed: 100, grav: 70, color, color2: '#efe7c6', dur: 0.8, big: 12 }));
+    this.touch(id, t, 0.5, (c, u) => { const k = Math.sin(Math.PI * u); c.setVeil({ color, shape: 0, amount: 0.65 * k, alpha: 0.9 }); c.fade = 1 - 0.65 * k; });
+  }
+  /** A Fireball burns a card it defeats: fire eats in from the edges and it thins as it goes to its pile. */
+  burn(id, t) {
+    const color = this.tint('fireball');
+    this.touch(id, t, 0.55, (c, u) => { c.setVeil({ color, shape: 2, amount: Math.min(1, u * 1.8) * (u < 0.8 ? 1 : (1 - u) / 0.2), alpha: 0.95 }); c.fade = 1 - 0.7 * Math.sin(Math.PI * u); c.bright = 0.5 * Math.sin(Math.PI * u); });
+  }
+  /**
+   * A Shift sends card `id` home: held up beside the spell, it breaks into scattered pixels (from `t`, while it is still held) and thins, crosses to the hand
+   * like that, and forms again as it comes down (the flight is the `present` one: it leaves at t + 0.3 and is down by about t + 0.7).
+   */
+  unmake(id, t, color) {
+    const T = 0.9;
+    this.touch(id, t, T, (c, u) => {
+      const s = u * T, k = s < 0.3 ? s / 0.3 : s < 0.68 ? 1 : Math.max(0, 1 - (s - 0.68) / 0.22);
+      c.setVeil({ color, shape: 0, amount: 0.62 * k, alpha: 0.85 }); c.fade = 1 - 0.75 * k;
+    });
+    const at = (dt) => this.at(t + dt, () => { const c = this.sc.cards.get(id); if (c) this.sc.overlay.pixel?.('burst', c.s.x.x, c.s.z.x, { y: c.s.y.x, n: 12, speed: 45, grav: 30, color, dur: 0.55 }); });
+    at(0.2); at(0.7);
+  }
+  /** A Witch's Kiss takes card `id`: a pink pixel heart grows out from its middle and little pixel hearts float up off it while it is held up (from `t`, for `dur`), and clears as it lands. */
+  charm(id, t, dur, color) {
+    this.touch(id, t, dur, (c, u) => {
+      const s = u * dur, k = Math.min(1, s / 0.35) * Math.min(1, (dur - s) / 0.35);
+      c.setVeil({ color, shape: 4, amount: 0.85 * k, alpha: 0.95 }); c.bright = 0.3 * k;
+    });
+    this.at(t + 0.4, () => { const c = this.sc.cards.get(id); if (c) this.sc.overlay.pixel?.('hearts', c.s.x.x, c.s.z.x, { y: c.s.y.x, color, dur: 1.1 }); });
+  }
   resolve(rid, ids, t, live) {
     const o = live(rid); if (!o) return;
     this.bless(rid, t, o, { wide: 1.2 });
-    [...ids].filter((id) => live(id)).sort((a, b) => dist(live(a), o) - dist(live(b), o)).forEach((id, i) => this.bless(id, t + 0.35 + i * 0.14, live(id), { i }));
+    const near = [...ids].filter((id) => live(id)).sort((a, b) => dist(live(a), o) - dist(live(b), o)), gap = Math.min(0.14, 0.7 / Math.max(1, near.length - 1));     // since 19 Nov 2026 it touches every creature, so the stagger is squeezed to fit
+    near.forEach((id, i) => this.bless(id, t + 0.35 + i * gap, live(id), { i }));
   }
 
   // ---- the plan --------------------------------------------------------------------------------------------------------------------------------
@@ -230,6 +272,7 @@ export class Fx {
         this.ring({ card: eid }, r - 0.1, { grow: 0.18, dur: 0.4 }); this.glow(id, r);
         this.fly(id, reveal, into, r, { lift: 1.2, half: 0.2, via: reveal, linger: HOLD });
       }
+      caster.took = into ? id : null;                          // the card that actually flies (a stand-in from the hand when the real one is hidden)
       holdChanged(r + HOLD + 0.2, new Set([...defeated, caster.id, eid, id ?? eid]));
       caster.end = r + HOLD + 0.45;
       return key;
@@ -265,7 +308,7 @@ export class Fx {
           }
           break;
         }
-        case 'release': t = this.unleash(view.players[e.p].chain.map((c) => c.id), live, t); break;
+        case 'release': t = this.unleash(view.players[e.p].chain.map((c) => c.id), live, t, (id) => spot(id)?.key); break;      // a card's key is null while it is hidden from this seat
         case 'cast': {
           const takes = events.some((x) => x.t === 'kiss' || x.t === 'recall' || x.t === 'shift'), theirs = e.p !== viewer;
           const n = next.get(e.id), show = { ...SHOW(side(e.p)), x: takes ? -2.2 : 0 };     // a Kiss or a Shift leaves room beside it for the card it takes
@@ -283,10 +326,17 @@ export class Fx {
           const r = caster.ready, a = { x: caster.show.x, y: 0.6, z: caster.show.z };
           if (e.t === 'fireball') {
             const tg = live(e.hit), dir = unit(a, tg), land = r + 0.16;
-            this.at(r, () => { const T = sc.cards.get(e.hit); sc.overlay.beam(new THREE.Vector3(a.x, 1.6, a.z), T ? T.root.position.clone().setY(1) : new THREE.Vector3(tg.x, 1, tg.z), { dur: 0.18 }); });
+            const fire = this.tint('fireball');                  // a ball of fire pixels flies to the target, shedding embers, and bursts on it
+            this.at(r, () => { const T = sc.cards.get(e.hit), b = T ? T.root.position : tg; sc.overlay.pixel?.('comet', a.x, a.z, { y: 1.6, x2: b.x, z2: b.z, y2: 1, dur: 0.2, color: fire, color2: GOLD }); });
+            this.at(land, () => { sc.overlay.pixel?.('burst', tg.x, tg.z, { y: 0.8, n: 22, speed: 80, grav: 50, color: fire, color2: GOLD, dur: 0.7 }); sc.overlay.pixel?.('pring', tg.x, tg.z, { r: 2.6, dur: 0.4, color: fire }); });
             holdChanged(land, new Set([...defeated, caster.id])); strike(e.hit, land, dir); blow = land; caster.end = land + 0.06;
           } else if (e.t === 'kiss') {
-            const key = present(e.id, caster.p);
+            const key = present(e.id, caster.p), pink = KISS;               // the pink of the kiss she blows in the art (her frame is lavender, too near the Warp Portal's purple)
+            if (caster.took) this.charm(caster.took, r - 0.15, HOLD + 0.8, pink);
+            for (const gid of sc.lastGather ?? []) if (gid !== e.id && sc.cards.has(gid)) {      // the cards laid out and not chosen fade as they go back to their piles
+              this.touch(gid, 0, 0.6, (c, u) => { const k = Math.sin(Math.PI * u); c.fade = 1 - 0.8 * k; c.setVeil({ color: pink, shape: 0, amount: 0.5 * k, alpha: 0.8 }); });
+            }
+            sc.lastGather = null;
             if (key) {                                                // the line that confirms what was taken (for your own Kiss too: the pick is over once it shows)
               const whose = e.from === viewer ? 'your' : 'their', where = e.zone === 'chain' ? 'Chain' : 'discard pile';
               this.at(r, () => sc.say?.(`Witch’s Kiss takes ${CARDS[key].name} from ${whose} ${where}.`));
@@ -297,11 +347,13 @@ export class Fx {
             caster.lead = r + 0.1; caster.end = r + 0.5;
           } else if (e.t === 'recall') {
             const key = present(e.id, e.from, true);
+            if (caster.took) this.unmake(caster.took, r + HOLD - 0.3, this.tint('shift'));
             if (key) this.at(r, () => sc.say?.(`${caster.p === viewer ? 'Your' : 'Their'} Shift returns ${CARDS[key].name} to ${e.from === viewer ? 'your' : 'their'} hand.`));
           } else if (e.t === 'shift') {
             // A Guardian is lifted off the card it guarded (which rings: it is no longer guarded), held up beside the Shift, and goes to its owner's hand.
             const owner = spot(e.id)?.owner;
             present(e.id, owner, true);
+            if (caster.took) this.unmake(caster.took, r + HOLD - 0.3, this.tint('shift'));
             if (e.from) this.ring({ card: e.from }, r + 0.1, { grow: 0.2, dur: 0.5 });
             const whose = owner === viewer ? 'your' : 'their';
             this.at(r, () => sc.say?.(`${caster.p === viewer ? 'Your' : 'Their'} Shift sends ${whose} Guardian back to ${whose} hand.`));
@@ -312,12 +364,19 @@ export class Fx {
           }
           break;
         }
-        case 'behind': {                                         // every unguarded creature, both players', is hit at once: all flash and ring together, with one push for the lot
+        case 'behind': {                                         // a dark wave of pixels sweeps the table; each unguarded creature, both players', is hit as it reaches it, flickering in the spell's colour
           if (!caster) break;
-          const land = caster.ready + 0.16;
+          const r = caster.ready, color = this.tint('behind'), pts = e.hits.map((id) => [id, live(id)]).filter(([, p]) => p);
+          const xs = pts.map(([, p]) => p.x), zs = pts.map(([, p]) => p.z), x0 = Math.min(...xs, 0) - 5, x1 = Math.max(...xs, 0) + 5, dur = 0.6;
+          this.at(r, () => sc.overlay.pixel?.('wave', 0, 0, { x0, x1, z0: Math.min(...zs, 0) - 2.5, z1: Math.max(...zs, 0) + 2.5, dur, color, w: 2.8 }));
+          let land = r + 0.16;
+          for (const [id, p] of pts) {
+            const ti = r + dur * (p.x - x0) / (x1 - x0); land = Math.max(land, ti);
+            strike(id, ti, [1, 0]);
+            this.touch(id, ti - 0.04, 0.4, (c, u) => c.setVeil({ color, shape: 0, amount: 0.55 * Math.sin(Math.PI * u) * (Math.floor(u * 9) % 2 ? 0.5 : 1), alpha: 0.85 }));
+          }
           holdChanged(land, new Set([...defeated, caster.id]));
-          for (const id of e.hits) strike(id, land, null);
-          this.at(land, () => sc.nudge(0, 0.45));
+          this.at(land, () => sc.nudge(0, 0.3));
           blow = land; caster.end = land + 0.06;
           break;
         }
@@ -329,7 +388,7 @@ export class Fx {
           if (e.lit) { const color = this.tint('lantern'); this.touch(e.id, o, 0.4, (c, u) => { c.bright = Math.sin(Math.PI * u); c.setVeil({ color, shape: 2, amount: 0.6 * Math.sin(Math.PI * u), alpha: 0.9 }); }); }   // a spent attacker the Lantern lets attack flares green
           if (e.portal) {
             const pid = view.players[next.get(e.id)?.owner ?? prev.get(e.id)?.owner]?.field.find((c) => c.key === 'portal')?.id;
-            this.at(o + 0.02, () => { const A = sc.cards.get(e.id), T = sc.cards.get(e.hit); if (A && T) sc.overlay.beam(A.root.position.clone().setY(1), T.root.position.clone().setY(1), { dur: 0.2, color: '#bfe6ff' }); });
+            this.at(o + 0.02, () => { const A = sc.cards.get(e.id), T = sc.cards.get(e.hit); if (A && T) { const a2 = A.root.position, t2 = T.root.position, purple = this.tint('portal'); sc.overlay.pixel?.('bolt', a2.x, a2.z, { x2: t2.x, z2: t2.z, y: 1, dur: 0.24, color: purple }); this.at(0.14, () => sc.overlay.pixel?.('pring', t2.x, t2.z, { r: 2.2, dur: 0.4, color: purple })); } });      // a jagged charge of Portal-purple pixels runs from the attacker straight through to its target
             if (pid) { this.glow(pid, o); this.ring({ card: pid }, o); }
             const owner = spot(e.hit)?.owner, color = this.tint('portal');           // the Guardians on the card hit are passed straight through: they go see-through for a beat
             for (const gd of view.players[owner]?.field.filter((c) => c.guards === e.hit) ?? []) this.ghost(gd.id, o, color, { dur: 0.5, depth: 0.6, tip: 0 });
@@ -340,7 +399,13 @@ export class Fx {
             blow = o + 0.26;
           } else blow = o + 0.06;
           holdChanged(blow, new Set([...defeated, e.id, e.hit]));
-          if (defeated.has(e.hit)) this.sound('death', blow + 0.04, tg);
+          if (caster?.lead !== undefined) {                    // a Shadow Step: the attacker goes dark and see-through, sheds shadow pixels, and comes back at its target
+            const shade = this.tint('shadow'), dusk = darken(shade, 0.7), T0 = Math.max(0, o - 0.12), T = blow + 0.3 - T0;
+            this.touch(e.id, T0, T, (c, u) => { const s = u * T, k = Math.min(1, s / 0.12) * Math.min(1, (T - s) / 0.22); c.fade = 1 - 0.65 * k; c.setVeil({ color: dusk, shape: 0, amount: 0.55 * k, alpha: 0.95 }); });
+            this.at(T0, () => sc.overlay.pixel?.('burst', a.x, a.z, { y: 0.6, n: 14, speed: 40, grav: -25, color: shade, color2: '#1b1428', dur: 0.6, big: 0 }));
+            this.at(blow - 0.02, () => sc.overlay.pixel?.('burst', tg.x - dir[0] * 1.5, tg.z - dir[1] * 1.5, { y: 0.8, n: 12, speed: 50, grav: 20, color: shade, color2: '#1b1428', dur: 0.5, big: 0 }));
+          }
+          if (defeated.has(e.hit)) { this.sound('death', blow + 0.04, tg); if (spot(e.hit)?.key !== 'heart') this.shatter(e.hit, blow, tg, spot(e.hit)?.key); }
           if (defeated.has(e.hit)) this.fly(e.hit, tg, next.get(e.hit) ?? tg, blow, { lift: 1.0, half: 0.1 }); else this.path(e.hit, [[0, 'live'], [blow, null]]);
           this.path(e.id, [[blow + 0.03, null]]);
           strike(e.hit, blow, dir);
@@ -352,7 +417,12 @@ export class Fx {
           sc.haloHold.add(heart); this.at(blow ?? 0.2, () => sc.haloHold.delete(heart));
           this.fly(angel, live(angel), next.get(angel) ?? live(angel), blow ?? 0.2, { lift: 1.0, half: 0.1 });
           this.sound('death', (blow ?? 0.2) + 0.04, live(angel), { gain: 0.8 });
-          this.glow(heart, blow ?? 0.2); this.ring({ card: heart }, blow ?? 0.2, { grow: 0.4, dur: 0.5, alpha: 1 });
+          this.glow(heart, blow ?? 0.2);
+          {                                                    // white feathers drift down from the Angel as it goes, and a light closes in round the Heart from its edges
+            const wing = this.tint('angel'), ap = live(angel), at = blow ?? 0.2;
+            if (ap) this.at(at, () => sc.overlay.pixel?.('burst', ap.x, ap.z, { y: 1, n: 24, speed: 70, grav: 35, sway: 10, rise: 22, color: '#ffffff', color2: wing, dur: 1.4, big: 24 }));
+            this.touch(heart, at, 0.85, (c, u) => { const k = Math.min(1, u * 2.2) * (u < 0.6 ? 1 : (1 - u) / 0.4); c.setVeil({ color: wing, shape: 2, amount: 0.45 * k, alpha: 0.85 }); c.bright = 0.4 * Math.sin(Math.PI * u); });
+          }
           const mine = (prev.get(heart) ?? next.get(heart))?.owner === viewer;      // whose Heart it was, so the line reads right from either seat
           this.at(blow ?? 0.2, () => sc.say?.(`${mine ? 'Your' : 'Their'} Angel takes the blow. ${mine ? 'Your' : 'Their'} Heart is safe.`));
           break;
@@ -360,12 +430,17 @@ export class Fx {
         case 'hit': {                                            // the first blow on a Heart: it turns spent (sideways), with a wider ring after the blow and a line saying so
           const n = next.get(e.id); if (n?.key !== 'heart') break;
           const at = blow ?? 0.2;
-          this.ring({ card: e.id }, at + 0.08, { grow: 0.5, dur: 0.65, alpha: 0.9 });
+          { const h = live(e.id), color = this.tint('heart');     // it cracks: jagged lines of pixels split out from it, and its pixels flicker
+            if (h) this.at(at, () => { sc.overlay.pixel?.('crack', h.x, h.z, { color, dur: 0.9, n: 6 }); sc.overlay.pixel?.('burst', h.x, h.z, { y: 0.4, n: 12, speed: 60, grav: 60, color, color2: '#efe7c6', dur: 0.6 }); });
+            this.touch(e.id, at, 0.45, (c, u) => c.setVeil({ color, shape: 0, amount: 0.7 * Math.sin(Math.PI * u) * (Math.floor(u * 10) % 2 ? 0.5 : 1), alpha: 0.9 })); }
           this.at(at, () => sc.say?.(`${n.owner === viewer ? 'Your' : 'Their'} Heart is spent. Another blow defeats it.`));
           break;
         }
         case 'defeat': {                                         // by a Fireball: the card flies to its pile when the blow lands
-          if (blow !== null && caster && !events.some((x) => x.t === 'attack' && x.hit === e.id)) { this.sound('death', blow + 0.04, live(e.id)); this.fly(e.id, live(e.id), next.get(e.id) ?? live(e.id), blow, { lift: 1.0, half: 0.1 }); }
+          if (blow !== null && caster && !events.some((x) => x.t === 'attack' && x.hit === e.id)) {
+            this.sound('death', blow + 0.04, live(e.id)); this.fly(e.id, live(e.id), next.get(e.id) ?? live(e.id), blow, { lift: 1.0, half: 0.1 });
+            if (events.some((x) => x.t === 'fireball' && x.hit === e.id)) this.burn(e.id, blow); else this.shatter(e.id, blow, live(e.id), spot(e.id)?.key);
+          }
           break;
         }
         case 'light': {                                          // a Lantern Keeper's light comes on or goes out over spent creatures
@@ -387,14 +462,17 @@ export class Fx {
         case 'recover': {
           if (e.free) this.at(0.05, () => sc.say?.(`Heaven’s Resolve stands ${e.p === viewer ? 'your' : 'their'} creatures back up.`));
           const stood = [...prev.values()].filter((c) => c.owner === e.p && c.dim && next.get(c.id) && !next.get(c.id).dim);
-          if (e.free) stood.forEach((c, i) => this.bless(c.id, 0.05 + i * 0.1, live(c.id), { i }));            // free, by a Heaven's Resolve: its light falls on each one that stands
+          if (e.free) { const gap = Math.min(0.1, 0.6 / Math.max(1, stood.length - 1)); stood.forEach((c, i) => this.bless(c.id, 0.05 + i * gap, next.get(c.id), { i })); }      // free, by a Heaven's Resolve: its light falls on each one that stands (lifted at its new, upright place: lifting it where it lay turned it back sideways and then up again)
           else stood.forEach((c, i) => { this.glow(c.id, 0.05 + i * 0.05); this.ring({ card: c.id }, 0.05 + i * 0.05, { grow: 0.1 }); });
           break;
         }
         case 'win': {
           const loser = view.players[1 - e.p].hearts[0]; if (!loser) break;
           const at = blow ?? 0.2, h = live(loser.id);
-          this.glow(loser.id, at); this.ring({ card: loser.id }, at, { grow: 0.5, dur: 0.7, alpha: 1 });
+          this.glow(loser.id, at);
+          { const color = this.tint('heart');                  // the losing Heart breaks apart: cracks, a great burst of its pixels, and it stays scattered and faint (the game is over)
+            this.at(at, () => { sc.overlay.pixel?.('crack', h.x, h.z, { color, dur: 1.1, n: 9 }); sc.overlay.pixel?.('burst', h.x, h.z, { y: 0.6, n: 40, speed: 130, grav: 80, color, color2: '#efe7c6', dur: 1.2, big: 10 }); sc.overlay.pixel?.('pring', h.x, h.z, { r: 7, dur: 0.8, color }); });
+            this.tween(at + 0.05, 1.0, (u) => { const c = sc.cards.get(loser.id); if (!c?.setVeil) return; c.setVeil({ color, shape: 0, amount: Math.min(1, u * 1.5), alpha: 0.9 - 0.45 * u }); c.fade = 1 - 0.7 * u; }); }
           this.at(at, () => sc.lean(h.x * 0.05, -2.2, h.z * 0.05));        // a slow push in toward the fallen Heart
           break;
         }

@@ -1,8 +1,9 @@
 /**
  * Field + Chain, Restricted: setup, legal moves and what a move does. The code is the rules; docs/RULES.md says the same in words.
  *
- * A turn has two allowances, `state.used = { field, chain }`, taken in either order (or not at all):
- *   Field: Deploy (an instant creature, the Lantern Keeper, is deployed without it), Attack (a second attack is part of it when the attacker has one), move a Guardian, or Recover (stand all your spent creatures; free while you have a Heaven's Resolve).
+ * A turn has two allowances, `state.used = { field, chain }`, taken in either order (or not at all), and one free Guardian move, `state.used.guard` (19 Nov 2026):
+ *   Field: Deploy (an instant creature is deployed without it), Attack (a second attack is part of it when the attacker has one), or Recover (stand your spent Knights and Maniacs; while you have a Heaven's Resolve it is free and stands all your spent creatures).
+ * Guardian move: once a turn, a ready Guardian may move onto another of your cards without the Field action (19 Nov 2026): any time on your turn, but never between a creature's two attacks.
  *   Chain: Wind one spell (Fireball, Shift, Behind You or Shadow Step) into the next free slot of the Chain, or Release the Chain.
  * Instants (Rally, Witch's Kiss) are played from the hand: free, unlimited, any time on your own turn, never wound.
  * Phases: 'play' (the turn), 'chain' (a released Chain is resolving: the head spell needs a target or a skip), 'bonus' (a second attack, optional), 'over'.
@@ -12,8 +13,8 @@
  * enter spent and never ready, so any hit defeats them). Nothing else is stored on a card.
  * The end of the piles, per player: the draw that empties a player's own pile discards that player's Guardians, and while their pile is empty they can bring no Guardian into play.
  */
-import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=a027ba8';
-import { drawCards } from './state.js?v=a027ba8';
+import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=54cfdab';
+import { drawCards } from './state.js?v=54cfdab';
 
 /** The cards a Guardian may guard. */
 const GUARDABLE = ['heart', 'knight', 'maniac', 'angel', 'lantern', 'portal', 'resolve'];
@@ -36,9 +37,9 @@ export function locate(s, id) {
 export const inPlay = (s, seat) => [...s.players[seat].hearts, ...s.players[seat].field];
 const everything = (s) => [...inPlay(s, 0), ...inPlay(s, 1)];
 export const guardiansOf = (s, c) => s.players[c.owner].field.filter((g) => g.key === 'guardian' && g.guards === c.id);
-/** Does a ready Lantern Keeper of the card's owner light it? It lights that player's other spent creatures (so never the Keeper itself, which is not spent while it is ready), never a Guardian (Guardians are never guarded; until 18 Nov 2026 a spent Guardian was reported lit in `light` events though it was not guarded). */
-const lit = (s, c) => isCreature(c) && c.key !== 'guardian' && c.spent && s.players[c.owner].field.some((k) => k.key === 'lantern' && !k.spent && k.id !== c.id);
-/** A card is guarded while any Guardian guards it, or, if it is a spent creature, while its owner has a ready Lantern Keeper. A Guardian is never guarded. */
+/** Does a ready Lantern Keeper of the card's owner light it? It lights every other spent card of that player's (19 Nov 2026; until then spent creatures only): spent creatures, every device (devices are always spent, so from the moment one enters play), and a Heart that has taken its first blow. Never the Keeper itself (it is not spent while it is ready), never a Guardian (Guardians are never guarded; until 18 Nov 2026 a spent Guardian was reported lit in `light` events though it was not guarded). */
+const lit = (s, c) => c.key !== 'guardian' && !!c.spent && s.players[c.owner].field.some((k) => k.key === 'lantern' && !k.spent && k.id !== c.id);
+/** A card is guarded while any Guardian guards it, or, if it is spent (a creature, a device or a Heart after its first blow), while its owner has a ready Lantern Keeper. A Guardian is never guarded. */
 export const isGuarded = (s, c) => c.key !== 'guardian' && (guardiansOf(s, c).length > 0 || lit(s, c));
 /** Is this player's draw pile empty? Then they have no Guardian in play and can bring none into play (see `startTurn`). A pure query: a pile's size is public. */
 export const outOfCards = (s, seat) => s.players[seat].deck.length === 0;
@@ -61,12 +62,12 @@ const throughPortal = (s, seat, t) => t.owner !== seat && isGuarded(s, t) && has
 /** Is this card's standing effect in force right now? A Warp Portal and a Heaven's Resolve always are; a Lantern Keeper and an Angel are while ready. Any other card has none. (A pure query for a front end to mark them.) */
 export const inForce = (s, c) => c.key === 'portal' || c.key === 'resolve' || ((c.key === 'lantern' || c.key === 'angel') && !c.spent);
 export const protector = (s, seat) => s.players[seat].field.find((c) => c.key === 'angel' && !c.spent);
-/** The cards this card's standing effect is acting on right now, as ids (empty when it is not in force or touches nothing): a Warp Portal the enemy Guardians it lets attacks pass; a Heaven's Resolve its owner's attackers (the creatures a free Recover would stand); a ready Lantern Keeper the spent creatures it lights; the protecting Angel its owner's Heart. A pure query for a front end to tie a card to what it affects. */
+/** The cards this card's standing effect is acting on right now, as ids (empty when it is not in force or touches nothing): a Warp Portal the enemy Guardians it lets attacks pass; a Heaven's Resolve all its owner's creatures (the ones its free Recover stands, 19 Nov 2026; until then its owner's attackers); a ready Lantern Keeper the spent cards it lights (creatures, devices, a spent Heart); the protecting Angel its owner's Heart. A pure query for a front end to tie a card to what it affects. */
 export const affects = (s, c) => {
   const own = s.players[c.owner], foe = s.players[1 - c.owner];
   if (c.key === 'portal') return foe.field.filter((g) => g.key === 'guardian').map((g) => g.id);
-  if (c.key === 'resolve') return own.field.filter(canAttack).map((g) => g.id);
-  if (c.key === 'lantern') return c.spent ? [] : own.field.filter((g) => g.id !== c.id && lit(s, g)).map((g) => g.id);
+  if (c.key === 'resolve') return own.field.filter(isCreature).map((g) => g.id);
+  if (c.key === 'lantern') return c.spent ? [] : inPlay(s, c.owner).filter((g) => g.id !== c.id && lit(s, g)).map((g) => g.id);      // spent creatures, devices and a spent Heart
   if (c.key === 'angel') return protector(s, c.owner)?.id === c.id && own.hearts[0] ? [own.hearts[0].id] : [];
   return [];
 };
@@ -74,8 +75,10 @@ export const affects = (s, c) => {
 const fireballTargets = (s) => everything(s).filter((t) => !isGuarded(s, t) && t.key !== 'heart');
 /** What Behind You hits: every creature of either player that is not guarded, the caster's own too, taken as a snapshot before anything is hit. A Guardian is never guarded, so every Guardian is included. Hearts and devices are not creatures. (Enemy creatures only for part of 18 Nov 2026; both sides again since, so a second copy in the same Chain wipes the caster's open creatures too.) */
 const behindTargets = (s) => everything(s).filter((c) => isCreature(c) && !isGuarded(s, c));
-/** Recover needs at least one spent creature of the player's. */
-const canRecover = (s, p) => p.field.some((c) => canAttack(c) && c.spent);           // Recover stands only attackers (18 Nov 2026): Guardians, Angels and Lantern Keepers ready only through Rally
+/** What Recover stands: without a Heaven's Resolve only Knights and Maniacs (18 Nov 2026: Guardians, Angels and Lantern Keepers then ready only through Rally); with a Resolve of the player's own, every creature of theirs (19 Nov 2026). Devices and Hearts never ready. */
+const recovers = (s, p) => (hasResolve(s, p.idx) ? isCreature : canAttack);
+/** Recover needs at least one spent card of the player's that it would stand. */
+const canRecover = (s, p) => { const stands = recovers(s, p); return p.field.some((c) => stands(c) && c.spent); };
 const rallyTargets = (s, seat) => s.players[seat].field.filter((c) => isCreature(c) && c.spent);
 const bonusTargets = (s, b) => { const c = locate(s, b.cardId)?.card; return c ? attackTargets(s, c.owner) : []; };
 
@@ -92,7 +95,7 @@ export function initialize(s) {
 }
 function startTurn(s) {
   s.turnNumber += 1;
-  s.used = { field: false, chain: false };
+  s.used = { field: false, chain: false, guard: false };
   const p = s.players[s.turn], wasLive = !outOfCards(s, p.idx);
   drawCards(s, p, 1);
   if (wasLive && outOfCards(s, p.idx)) for (const g of p.field.filter((c) => c.key === 'guardian')) { ev(s, { t: 'defeat', id: g.id }); remove(s, g); discard(s, g); }       // their last card is drawn: their Guardians are discarded
@@ -113,18 +116,16 @@ function shadowMoves(s, p) {
   for (const c of p.field) if (canAttack(c)) for (const t of targets) out.push({ type: 'shadow', id: `shadow:${c.id}:${t.id}`, attackerId: c.id, targetId: t.id });
   return out;
 }
-/** Witch's Kiss: any card in either discard pile, or a wound spell in either Chain, in any slot. A Chain that is resolving is committed and can't be taken from. A Guardian needs a card to guard. */
+/** Witch's Kiss: any card in either discard pile, or a wound spell in the enemy's Chain, in any slot; never another Witch's Kiss (19 Nov 2026: two Kisses took each other back for ever) and never a spell from your own Chain (19 Nov 2026: it only undid your own Wind). A Guardian needs a card to guard. */
 function kissMoves(s, p) {
   const out = [];
   for (const q of s.players) for (const c of q.discard) {
+    if (c.key === 'kiss') continue;                                                     // a Kiss never takes a Kiss
     if (c.key === 'guardian' && outOfCards(s, p.idx)) continue;                         // with your pile empty, you have no Guardians
     if (c.key === 'guardian') for (const t of guardable(s, p.idx)) out.push({ type: 'kiss', id: `kiss:${c.id}:${t.id}`, targetId: c.id, toId: t.id });
     else out.push({ type: 'kiss', id: `kiss:${c.id}`, targetId: c.id });
   }
-  for (const q of s.players) {
-    if (s.phase === 'chain' && q.idx === s.turn) continue;
-    for (const c of q.chain) out.push({ type: 'kiss', id: `kiss:${c.id}`, targetId: c.id });
-  }
+  for (const c of s.players[1 - p.idx].chain) out.push({ type: 'kiss', id: `kiss:${c.id}`, targetId: c.id });      // the enemy's Chain only (it is never the one resolving)
   return out;
 }
 /** The targets of one spell, as moves named for the spell; a hand cast and a Chain spell share them. */
@@ -137,11 +138,11 @@ function spellMoves(s, p, key) {
   if (key === 'rally') return rallyTargets(s, p.idx).map((t) => ({ type: 'rally', id: `rally:${t.id}`, targetId: t.id }));
   return [];
 }
-/** The Field action: Deploy, Attack, move a Guardian, or Recover. */
+/** The Field action: Deploy, Attack, or Recover. */
 function fieldMoves(s, p) {
   const moves = [];
-  const lanterns = () => p.hand.filter((c) => CARDS[c.key].instant).map((c) => ({ type: 'deploy', id: `deploy:${c.id}`, cardId: c.id, dest: 'open' }));
-  if (s.used.field) { if (canRecover(s, p) && hasResolve(s, p.idx)) moves.push({ type: 'recover', id: 'recover' }); moves.push(...lanterns()); return moves; }       // with a Heaven's Resolve, Recover is still open after the Field action is used; an instant creature is deployed without it
+  const instantCreatures = () => p.hand.filter((c) => CARDS[c.key].instant).map((c) => ({ type: 'deploy', id: `deploy:${c.id}`, cardId: c.id, dest: 'open' }));
+  if (s.used.field) { if (canRecover(s, p) && hasResolve(s, p.idx)) moves.push({ type: 'recover', id: 'recover' }); moves.push(...instantCreatures()); return moves; }       // with a Heaven's Resolve, Recover is still open after the Field action is used; an instant creature is deployed without it
   for (const c of p.hand) {
     if (kindOf(c) !== 'creature' && kindOf(c) !== 'device') continue;
     if (c.key === 'guardian' && outOfCards(s, p.idx)) continue;                           // with your pile empty, you have no Guardians
@@ -149,14 +150,15 @@ function fieldMoves(s, p) {
     else moves.push({ type: 'deploy', id: `deploy:${c.id}`, cardId: c.id, dest: 'open' });
   }
   const targets = attackTargets(s, p.idx);
-  for (const c of p.field) {
-    if (!ready(c) && !canStrike(s, c)) continue;                                        // a sheltered spent creature can still attack, and nothing else
-    if (c.key === 'guardian' && ready(c)) {
-      for (const t of guardable(s, p.idx, c.guards)) moves.push({ type: 'reguard', id: `reguard:${c.id}:${t.id}`, cardId: c.id, dest: 'to', targetId: t.id });
-    }
-    if (canStrike(s, c)) for (const t of targets) moves.push({ type: 'attack', id: `attack:${c.id}:${t.id}`, cardId: c.id, targetId: t.id });
-  }
+  for (const c of p.field) if (canStrike(s, c)) for (const t of targets) moves.push({ type: 'attack', id: `attack:${c.id}:${t.id}`, cardId: c.id, targetId: t.id });     // a sheltered spent creature can still attack
   if (canRecover(s, p)) moves.push({ type: 'recover', id: 'recover' });
+  return moves;
+}
+/** Moving a Guardian (19 Nov 2026): once a turn (`used.guard`), a ready Guardian onto another card of its owner's that it could guard, without the Field action. A spent Guardian cannot move. Never offered in the bonus phase. */
+function guardMoves(s, p) {
+  const moves = [];
+  if (s.used.guard) return moves;
+  for (const c of p.field) if (c.key === 'guardian' && ready(c)) for (const t of guardable(s, p.idx, c.guards)) moves.push({ type: 'reguard', id: `reguard:${c.id}:${t.id}`, cardId: c.id, dest: 'to', targetId: t.id });
   return moves;
 }
 /** The instants in the hand, cast for free (a cast is complete with its target, and names the spell it casts). */
@@ -177,12 +179,12 @@ function chainMoves(s, p) {
 export function legalMoves(s) {
   if (s.phase === 'over') return [];
   const p = s.players[s.turn];
-  if (s.phase === 'chain') return [...spellMoves(s, p, p.chain[0].key), { type: 'skip', id: 'skip' }, ...instantMoves(s, p), ...fieldMoves(s, p)];       // the head spell (the owner may always skip it), an instant, or the unused Field action between spells
+  if (s.phase === 'chain') return [...spellMoves(s, p, p.chain[0].key), { type: 'skip', id: 'skip' }, ...instantMoves(s, p), ...fieldMoves(s, p), ...guardMoves(s, p)];       // the head spell (the owner may always skip it), an instant, the unused Field action or a Guardian move between spells
   if (s.phase === 'bonus') {                                                         // a second attack: another target, or stop; nothing may come between
     const c = locate(s, s.bonus.cardId).card;
     return [...bonusTargets(s, s.bonus).map((t) => ({ type: 'attack', id: `attack:${c.id}:${t.id}`, cardId: c.id, targetId: t.id, bonus: true })), { type: 'decline', id: 'decline' }];
   }
-  return [...fieldMoves(s, p), ...chainMoves(s, p), ...instantMoves(s, p), { type: 'end', id: 'end' }];
+  return [...fieldMoves(s, p), ...guardMoves(s, p), ...chainMoves(s, p), ...instantMoves(s, p), { type: 'end', id: 'end' }];
 }
 export const moveError = (s, move, moves = legalMoves(s)) => (moves.some((m) => m.id === move.id) ? null : 'That is not a legal action now.');
 
@@ -286,13 +288,15 @@ function resolve(s, p, kind, legal, by) {
   }
 }
 /**
- * A Lantern Keeper's light comes on or goes out over creatures that were already spent: it was deployed or readied, or it was spent, hit or taken away.
- * One `light` event per player whose light changed, after the move's own events: `on`, the creatures (`ids`), and the Keeper (`by`). For the front end only.
+ * A Lantern Keeper's light comes on or goes out over cards that were already spent (creatures, devices, a spent Heart): it was deployed or readied, or it was spent, hit or taken away.
+ * One `light` event per player whose light changed, after the move's own events: `on`, the cards (`ids`), and the Keeper (`by`). For the front end only. A card that turns
+ * spent, or a device that enters play, beside a ready Keeper is lit at once but gets no `light` event: it was not spent before the move (`affects` lists it).
  */
 function light(before, s) {
   const litIn = (g) => new Set(everything(g).filter((c) => lit(g, c)).map((c) => c.id));
-  const was = litIn(before), now = litIn(s), spentThen = (id) => { const at = locate(before, id); return at?.zone === 'field' && !!at.card.spent; };
-  const spentNow = (id) => { const at = locate(s, id); return at?.zone === 'field' && !!at.card.spent; };
+  const onTable = (at) => at?.zone === 'field' || at?.zone === 'hearts';            // a spent Heart is lit too (19 Nov 2026)
+  const was = litIn(before), now = litIn(s), spentThen = (id) => { const at = locate(before, id); return onTable(at) && !!at.card.spent; };
+  const spentNow = (id) => { const at = locate(s, id); return onTable(at) && !!at.card.spent; };
   const keeper = (g, seat) => g.players[seat].field.find((k) => k.key === 'lantern' && !k.spent)?.id;
   for (const seat of [0, 1]) {
     const mine = (id) => locate(s, id)?.card.owner === seat;
@@ -309,10 +313,10 @@ function play(state, legal) {
 
   if (legal.type === 'deploy') {
     const c = take('hand', legal.cardId);
-    p.field.push(c); if (!CARDS[c.key].instant) s.used.field = true;              // an instant creature (the Lantern Keeper) is deployed without the Field action (18 Nov 2026)
+    p.field.push(c); if (!CARDS[c.key].instant) s.used.field = true;              // an instant creature (the Lantern Keeper since 18 Nov 2026, the Maniac since 19 Nov 2026) is deployed without the Field action
     if (c.key === 'maniac' || kindOf(c) === 'device') c.spent = true;             // a Maniac and every device enter spent
     if (legal.dest === 'guard') c.guards = legal.targetId;
-    const touches = c.key === 'portal' ? s.players[1 - p.idx].field.filter((g) => g.key === 'guardian') : c.key === 'resolve' ? p.field.filter(canAttack) : null;
+    const touches = c.key === 'portal' ? s.players[1 - p.idx].field.filter((g) => g.key === 'guardian') : c.key === 'resolve' ? p.field.filter(isCreature) : null;
     ev(s, touches ? { t: 'deploy', id: c.id, touches: touches.map((g) => g.id) } : { t: 'deploy', id: c.id });   // what a Warp Portal or a Heaven's Resolve affects as it comes in (for the front end's effects)
   } else if (legal.type === 'decline') {
     s.phase = s.bonus.back || 'play'; delete s.bonus;
@@ -321,11 +325,11 @@ function play(state, legal) {
   } else if (legal.type === 'reguard') {
     const g = card(legal.cardId), was = g.guards ?? null;
     g.guards = legal.targetId;
-    s.used.field = true;                                        // moving does not spend it (18 Nov 2026); it uses the Field action
+    s.used.guard = true;                                        // the turn's one free Guardian move (19 Nov 2026; until then it used the Field action); moving does not spend it (18 Nov 2026)
     ev(s, { t: 'reguard', id: g.id, from: was, to: g.guards });
   } else if (legal.type === 'recover') {
-    for (const c of p.field) if (canAttack(c)) delete c.spent;                   // only Knights and Maniacs stand; a spent defender waits for a Rally
-    const free = hasResolve(s, p.idx);
+    const stands = recovers(s, p), free = hasResolve(s, p.idx);
+    for (const c of p.field) if (stands(c)) delete c.spent;                      // Knights and Maniacs only (a spent defender waits for a Rally), or with a Resolve every creature, with no choosing
     if (!free) s.used.field = true;                                              // with a Heaven's Resolve it is free: the Field action is still there to use
     ev(s, free ? { t: 'recover', p: p.idx, free: true } : { t: 'recover', p: p.idx });
   } else if (legal.type === 'wind') {
@@ -357,6 +361,6 @@ function play(state, legal) {
     if (p.chain.length) return s;                            // the next spell in it is reached, or the Chain goes on from the new position after a Field action at a breakpoint
     s.phase = 'play';                                        // the Chain is done: back to the turn it interrupted
   }
-  if (legal.type === 'end' || legalMoves(s).every((m) => m.type === 'end')) endTurn(s);      // the turn ends when the player says so, or when nothing is left to do
+  if (legal.type === 'end' || legalMoves(s).every((m) => m.type === 'end')) endTurn(s);      // the turn ends when the player says so, or when nothing is left to do (the turn's Guardian move, while unused and possible, is something to do: the player chooses where it ends the turn)
   return s;
 }

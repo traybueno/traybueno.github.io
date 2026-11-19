@@ -8,10 +8,10 @@
  * looks a few moves further along its own turn (a deploy, an instant and an attack are one turn) before picking. The profiles differ in how far they
  * look, how much noise there is in their judgement, how much a threat counts, how often they settle for a lesser move, and whether they weigh the answer.
  */
-import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=a027ba8';
+import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=54cfdab';
 
-/** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. */
-export const BOT_VERSION = 'bots/15';
+/** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. bots/17 (19 Nov 2026): one free Guardian move a turn; it is judged where it leaves the Guardian when the turn ends (see `chooseMove`). bots/16 had a loop guard for unlimited moves, no longer needed. */
+export const BOT_VERSION = 'bots/17';
 
 /**
  * Squire is a beginner: it looks one move ahead, half-sees threats (`caution`) and now and then settles for a lesser move (`slip`), never a wild one.
@@ -175,12 +175,12 @@ function step(s, m, me) {
   }
   return g;
 }
-/** The best score reachable by playing up to `depth` more moves of this turn, trying only the `beam` most promising each time, and the position it leads to: `{ v, g }`. */
+/** The best score reachable by playing up to `depth` more moves of this turn, trying only the `beam` most promising each time, and the position it leads to: `{ v, g }`. Guardian moves are left out (they are judged at the end of the turn, see `chooseMove`). */
 function reach(s, me, depth, beam) {
   const here = { v: evaluate(s, me), g: s };
   if (depth === 0 || s.phase === 'over' || s.turn !== me) return here;
   let best = here;
-  const next = sensible(s).filter((m) => m.type !== 'end').map((m) => { const g = step(s, m, me); return { g, v: evaluate(g, me) }; }).sort((a, b) => b.v - a.v).slice(0, beam);
+  const next = sensible(s).filter((m) => m.type !== 'end' && m.type !== 'reguard').map((m) => { const g = step(s, m, me); return { g, v: evaluate(g, me) }; }).sort((a, b) => b.v - a.v).slice(0, beam);
   for (const { g, v } of next) { const r = depth > 1 ? reach(g, me, depth - 1, beam) : { v, g }; if (r.v > best.v) best = r; }
   return best;
 }
@@ -258,12 +258,12 @@ export const settle = (s, m, me) => step(s, m, me);
 /**
  * A key for a position within a turn: two orders of moves that reach the same board (Rally then Kiss, or Kiss then Rally) give the same key, so the
  * turn search looks at each position once. It covers everything a later move can depend on: both fields (in play order, which decides which Angel saves),
- * Hearts, hands, Chains, discard piles, the allowances used, the phase and a second attack on offer.
+ * Hearts, hands, Chains, discard piles, the allowances and the Guardian move used, the phase and a second attack on offer.
  */
 const cardKey = (c) => c.id + (c.spent ? '*' : '') + (c.guards ? '>' + c.guards : '');
 export function posKey(s) {
   const side = (p) => [p.hearts.map(cardKey).join(','), p.field.map(cardKey).join(','), p.hand.map((c) => c.id).sort().join(','), p.chain.map((c) => c.id).join(','), p.discard.map((c) => c.id).sort().join(',')].join('|');
-  return [s.turn, s.turnNumber, s.phase, s.used.field ? 1 : 0, s.used.chain ? 1 : 0, s.bonus ? `${s.bonus.cardId}${s.bonus.free ? 'f' : ''}${s.bonus.back ?? ''}` : '', ...s.players.map(side)].join('/');
+  return [s.turn, s.turnNumber, s.phase, s.used.field ? 1 : 0, s.used.chain ? 1 : 0, s.used.guard ? 1 : 0, s.bonus ? `${s.bonus.cardId}${s.bonus.free ? 'f' : ''}${s.bonus.back ?? ''}` : '', ...s.players.map(side)].join('/');
 }
 /** A small binary heap, highest `pri` first. */
 function heap() {
@@ -372,13 +372,13 @@ const finishTrace = (trace, kind, top) => { if (trace) { trace.kind = kind; trac
 
 /**
  * The moves a bot considers. Some legal moves are ones no player makes, and a bot never chooses them (they only fed loops and wasted cards):
- * a Witch's Kiss that takes back a Witch's Kiss (they trade one for the other, for ever), a Witch's Kiss that takes a Shift out of a Chain (since bots/11:
+ * a Witch's Kiss that takes a Shift out of a Chain (since bots/11:
  * the Shift goes back and forth, a card was wound three times in a game in one game in five), and a Fireball at the player's own card (skipping it costs nothing).
  */
 let holding = false;                                                      // set by a bot (see `makeBot`) for a turn in which it keeps its Witch's Kiss in hand
 const sensible = (game) => legalMoves(game).filter((m) => {
   if (holding && m.type === 'cast' && m.spell === 'kiss') return false;
-  if (m.type === 'cast' && m.spell === 'kiss') { const at = locate(game, m.targetId); if (at?.card.key === 'kiss' || (at?.zone === 'chain' && at.card.key === 'shift')) return false; }
+  if (m.type === 'cast' && m.spell === 'kiss') { const at = locate(game, m.targetId); if (at?.zone === 'chain' && at.card.key === 'shift') return false; }        // a Kiss taking a Kiss is no longer legal (19 Nov 2026)
   if (m.type === 'fireball' && locate(game, m.targetId)?.p.idx === game.turn) return false;
   return true;
 });
@@ -400,6 +400,9 @@ export function chooseMove(game, seat, profile = PROFILES.knight, rng = Math.ran
     // (since bots/10): before, it was this position judged as still mine, with their threats discounted, so in a bad position ending always looked a few
     // points better than any move that happened to end the turn (a free Recover after both actions are used passed the turn on its own).
     if (m.type === 'end') return { m, score: 1.25 * evaluate(apply(game, m), seat, caution) - END_COST };
+    // A Guardian's place matters only when the turn ends (since bots/16 moving one is free, any time; once a turn since bots/17): a move is scored as the turn ending with it there, as
+    // "end" is. Judged mid-turn, where the other side's threats count less, sliding a Guardian off the Heart looked a little better than ending, every turn.
+    if (m.type === 'reguard') { const n = apply(game, m), ended = n.phase === 'play' ? apply(n, { id: 'end' }) : null; if (ended) return { m, score: 1.25 * evaluate(ended, seat, caution) - END_COST }; }
     const g = step(game, m, seat);
     return { m, g, v: evaluate(g, seat, caution) };
   });
