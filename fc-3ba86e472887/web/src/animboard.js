@@ -6,8 +6,8 @@
  *   build(scenario)  the position, as a game state (seat 0 is the viewer; some scenarios are the opponent's turn)
  *   SCENARIOS        [{ id, group, name, setup, after, turn, steps }]
  */
-import { newGame, legalMoves, apply } from '../../src/index.js?v=ad16557';
-import { prepare } from './match.js?v=ad16557';
+import { newGame, legalMoves, apply } from '../../src/index.js?v=80ff107';
+import { prepare } from './match.js?v=80ff107';
 
 export const SEED = 5;
 

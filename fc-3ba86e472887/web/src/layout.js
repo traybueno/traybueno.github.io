@@ -13,12 +13,12 @@ export const TABLE = { w: 41, d: 30 };                    // the table plane
 export const VIEW = { w: 40.6, zMin: -14.2, zMax: 14.9 }; // what the camera frames: the table and the viewer's hand, which sits a little past the near edge
 // On a phone held sideways (web/src/phone.js) the camera frames closer, so the cards are as large as the short screen allows: the other player's hand
 // (backs) only shows its near edge, and the viewer's hand, larger, runs a little off the bottom like cards held low (a held finger shows any card big).
-// (`w` is wider than the table so a narrow phone still leaves the side columns room for the buttons and the rules card.)
-export const PHONE_VIEW = { w: 47, zMin: -11.4, zMax: 15.2 };
+// The phone's camera fits this box into the screen left of the column of buttons (phone.js phoneArea), so the table runs edge to edge.
+export const PHONE_VIEW = { w: 37, zMin: -10.4, zMax: 13.6 };
 
 const FIELD_Z = 4.4, HEART_Z = 4.9;                       // the row of cards, the Heart a little nearer the owner
 // The viewer's hand rests a little below the near edge, every card readable. The other player's hand sits past the far edge.
-const DESK_HAND = { z: 12.5, lift: 1.1, scale: 1.12 }, PHONE_HAND = { z: 12.7, lift: 1.1, scale: 1.5 };
+const DESK_HAND = { z: 12.5, lift: 1.1, scale: 1.12 }, PHONE_HAND = { z: 11.9, lift: 1.1, scale: 1.5 };
 let HAND = DESK_HAND;
 /** The phone layout (a larger hand), or the normal one. Only web/src/phone.js mode turns it on. */
 export const setPhoneHand = (on) => { HAND = on ? PHONE_HAND : DESK_HAND; };

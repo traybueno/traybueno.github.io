@@ -3,14 +3,14 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=ad16557';
-import { Table } from './table.js?v=ad16557';
-import { Overlay } from './overlay.js?v=ad16557';
-import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=ad16557';
-import { phone } from './phone.js?v=ad16557';
-import { Fx } from './fx.js?v=ad16557';
-import { protector, inForce, affects } from '../../src/index.js?v=ad16557';
-import { portalPulse } from './overlay.js?v=ad16557';
+import { Card, SPRING } from './card.js?v=80ff107';
+import { Table } from './table.js?v=80ff107';
+import { Overlay } from './overlay.js?v=80ff107';
+import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=80ff107';
+import { phone, phoneArea } from './phone.js?v=80ff107';
+import { Fx } from './fx.js?v=80ff107';
+import { protector, inForce, affects } from '../../src/index.js?v=80ff107';
+import { portalPulse } from './overlay.js?v=80ff107';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 
@@ -60,9 +60,12 @@ export class Scene {
     this.size = { w, h, dpr: window.devicePixelRatio || 1 };
     this.renderer.setPixelRatio(Math.min(this.size.dpr, 2));
     this.renderer.setSize(w, h, false);
-    const cam = this.camera; cam.aspect = w / h;
-    // A phone held sideways frames the table closer and holds a larger hand (layout.js PHONE_VIEW); a desktop never does.
+    const cam = this.camera;
+    // A phone held sideways frames the table closer and holds a larger hand (layout.js PHONE_VIEW), and fits it into the screen left of the column of
+    // buttons (phone.js phoneArea), so no side of the screen is left empty; a desktop never does.
     const close = phone && w > h, VIEW = close ? PHONE_VIEW : VIEW_DESK;
+    const area = close ? phoneArea(w) : { left: 0, width: w };
+    cam.clearViewOffset(); cam.aspect = area.width / h;
     if (close !== this.close) { this.close = close; setPhoneHand(close); if (this.view) this.show(this.view, this.viewer, { snap: false, gather: this.gather, held: this.held }); }
     const tilt = THREE.MathUtils.degToRad(CAMERA_TILT), target = new THREE.Vector3(0, 0, (VIEW.zMin + VIEW.zMax) / 2 + 0.6);
     const corners = [-1, 1].flatMap((sx) => [VIEW.zMin, VIEW.zMax].flatMap((z) => [0, 2.2].map((y) => new THREE.Vector3(sx * VIEW.w / 2, y, z))));
@@ -73,9 +76,12 @@ export class Scene {
     let lo = 10, hi = 400;
     for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
     fits(hi); this.camBase.copy(cam.position);
+    // The table was fitted to the area as if it were the whole screen; the camera then draws the whole screen with that area where it belongs.
+    if (close) { cam.setViewOffset(area.width, h, -area.left, 0, w, h); cam.updateProjectionMatrix(); }
     // Where the table's left edge and its middle line fall on the screen, for the page around the canvas (the reference card sits in the margin there).
     const edge = new THREE.Vector3(-TABLE.w / 2, 0, 0).project(cam), root = document.documentElement.style;
     root.setProperty('--table-left', `${((edge.x + 1) / 2) * w}px`); root.setProperty('--table-mid', `${((1 - edge.y) / 2) * h}px`);
+    root.setProperty('--table-cx', `${area.left + area.width / 2}px`);
   }
 
   /**

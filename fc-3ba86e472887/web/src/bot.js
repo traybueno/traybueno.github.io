@@ -8,7 +8,7 @@
  * looks a few moves further along its own turn (a deploy, an instant and an attack are one turn) before picking. The profiles differ in how far they
  * look, how much noise there is in their judgement, how much a threat counts, how often they settle for a lesser move, and whether they weigh the answer.
  */
-import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=ad16557';
+import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=80ff107';
 
 /** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. bots/17 (19 Nov 2026): one free Guardian move a turn; it is judged where it leaves the Guardian when the turn ends (see `chooseMove`). bots/16 had a loop guard for unlimited moves, no longer needed. */
 export const BOT_VERSION = 'bots/17';

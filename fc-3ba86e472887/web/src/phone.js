@@ -32,6 +32,20 @@ if (phone) {
   new MutationObserver(watch).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['hidden'], childList: true });
 }
 
+/** The phone's right-hand column (buttons, Menu, the rules card) is this wide; the table takes the rest of the screen. Matches --side-w in index.html. */
+export const PHONE_COL = 112;
+let probe = null;
+/** The screen's safe-area insets (the notch, the rounded corners), in px. */
+function insets() {
+  if (!probe) { probe = document.createElement('div'); probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)'; document.body.append(probe); }
+  const st = getComputedStyle(probe); return { l: parseFloat(st.paddingLeft) || 0, r: parseFloat(st.paddingRight) || 0 };
+}
+/** Where the table goes on a phone held sideways, for a screen `w` px wide: from the left edge (clear of the notch) to the column of buttons. */
+export function phoneArea(w) {
+  const { l, r } = insets(), left = Math.max(4, l), right = PHONE_COL + Math.max(6, r) + 6;
+  return { left, width: Math.max(100, w - left - right) };
+}
+
 /** Called from the click on Start game or Learn to play (a user gesture, which full screen and the orientation lock both need). */
 export function enterGame() {
   if (!phone) return;

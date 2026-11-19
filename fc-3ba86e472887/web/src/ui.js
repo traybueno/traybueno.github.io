@@ -5,9 +5,9 @@
  * the result shown when the game is over. Plain DOM over the canvas.
  */
 
-import { createRefCard } from './refcard.js?v=ad16557';
-import { screenFrame, chainBackdrop, cardFan, ornament } from './title.js?v=ad16557';
-import { enterGame, leaveGame } from './phone.js?v=ad16557';
+import { createRefCard } from './refcard.js?v=80ff107';
+import { screenFrame, chainBackdrop, cardFan, ornament } from './title.js?v=80ff107';
+import { enterGame, leaveGame } from './phone.js?v=80ff107';
 
 /** `faceOf(key)` is the finished face of a card (the canvas the table's card is textured from), so the preview shows the same words. */
 export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
@@ -31,6 +31,8 @@ export function createUI({ faceOf, onButton, onCoverDone, onMenu }) {
   const lessonBox = el('div', 'lesson'), bar = el('div', 'bar'), hist = el('div', 'hist'), tab = el('button', 'tabbtn', 'History'), hint = el('div', 'hint'), cover = el('div', 'cover'), over = el('div', 'over'), start = el('div', 'start'), preview = el('div', 'preview');
   const urls = {}, previewImg = el('img'); previewImg.alt = ''; previewImg.draggable = false; preview.append(el('div', 'pimg')); preview.firstChild.append(previewImg);
   const buttons = {};
+  // On a phone the big copy stays up after a tap, so a tap on it puts it away (on a desktop it never takes the pointer).
+  preview.addEventListener('pointerdown', (e) => { e.stopPropagation(); shown = null; preview.classList.remove('on', 'right'); });
   for (const [name, label] of [['skip', 'Skip'], ['recover', 'Recover'], ['release', 'Release'], ['end', 'End Turn']]) {
     const b = button(name, label); b.hidden = true; b.addEventListener('click', () => onButton(name)); bar.append(b); buttons[name] = b;
   }

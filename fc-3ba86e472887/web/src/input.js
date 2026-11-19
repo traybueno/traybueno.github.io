@@ -3,10 +3,10 @@
  * accepted. A drop on a legal target makes that move (asking a second question in place if the move is not yet complete); a drop anywhere else lets
  * the card go back where it came from.
  */
-import { CARDS, isGuarded, locate } from '../../src/index.js?v=ad16557';
-import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=ad16557';
-import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=ad16557';
-import { phone } from './phone.js?v=ad16557';
+import { CARDS, isGuarded, locate } from '../../src/index.js?v=80ff107';
+import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=80ff107';
+import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=80ff107';
+import { phone } from './phone.js?v=80ff107';
 
 const MOVE_PX = 7;
 const PEEK_MS = 260;                                   // on a phone, a finger held this long on a face-up card shows it big (a phone has no hover)
@@ -127,7 +127,18 @@ export class Input {
     this.unpeek(down);
     if (this.drag) return this.drop(ndc);
     if (down.peeked) return;                                             // the card was held to be read: that is all
+    const touch = phone && e.pointerType !== 'mouse', before = { sel: this.sel, choice: this.choice }, top = touch ? this.scene.cardsAt(ndc)[0]?.card : null;
     this.click(ndc, down.src);
+    if (touch) this.tapPreview(top, before, e.clientX);
+  }
+  /**
+   * A phone has no hover, so a tap shows the big copy instead: of the card just picked up, or of any face-up card tapped while nothing was picked (to
+   * read it). A tap that plays a move or puts a card back shows nothing; tapping the big copy puts it away (ui.js).
+   */
+  tapPreview(top, before, px) {
+    const picked = top?.key && this.sel === top.id && before.sel !== top.id;
+    const looked = top?.key && !before.sel && !before.choice && !this.sel && !this.choice;
+    this.cb.onPreview(picked || looked ? top.key : null, px < innerWidth * 0.4);
   }
 
   hover(ndc, touch = false) {

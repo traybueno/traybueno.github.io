@@ -5,7 +5,7 @@
  * other is the life of a card (Ready, Spent, Defeated) and one rule per row, each with a small pixel icon in the colour of the card it is about.
  * The words come from src/cards.js; nothing here is a rule.
  */
-import { REFERENCE } from '../../src/index.js?v=ad16557';
+import { REFERENCE } from '../../src/index.js?v=80ff107';
 
 /** Pixel icons, drawn square by square so they step like the art. */
 const ICONS = {
