@@ -1,7 +1,7 @@
 /** The supplied card art: one blank face per card key (the engine's `CARDS` keys; frame and picture, no words), with the engine's name, type and text drawn on it (face.js), and one card back. */
 import * as THREE from 'three';
-import { CARDS } from '../../src/index.js?v=8059ec6';
-import { drawFace, FONT } from './face.js?v=8059ec6';
+import { CARDS } from '../../src/index.js?v=b3f8a59';
+import { drawFace, FONT } from './face.js?v=b3f8a59';
 
 const BASE = new URL('../assets/cards/', import.meta.url);
 /** Engine card key -> blank image file (without .png). The Berserker is the `maniac` card. */

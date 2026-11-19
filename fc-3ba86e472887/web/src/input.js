@@ -3,10 +3,10 @@
  * accepted. A drop on a legal target makes that move (asking a second question in place if the move is not yet complete); a drop anywhere else lets
  * the card go back where it came from.
  */
-import { CARDS, isGuarded, locate } from '../../src/index.js?v=8059ec6';
-import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=8059ec6';
-import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=8059ec6';
-import { phone } from './phone.js?v=8059ec6';
+import { CARDS, isGuarded, locate } from '../../src/index.js?v=b3f8a59';
+import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=b3f8a59';
+import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=b3f8a59';
+import { phone } from './phone.js?v=b3f8a59';
 
 const MOVE_PX = 7;
 const PEEK_MS = 260;                                   // on a phone, a finger held this long on a face-up card shows it big (a phone has no hover)
