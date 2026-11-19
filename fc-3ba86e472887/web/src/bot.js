@@ -8,10 +8,10 @@
  * looks a few moves further along its own turn (a deploy, an instant and an attack are one turn) before picking. The profiles differ in how far they
  * look, how much noise there is in their judgement, how much a threat counts, how often they settle for a lesser move, and whether they weigh the answer.
  */
-import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=c5cc373';
+import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=a027ba8';
 
 /** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. */
-export const BOT_VERSION = 'bots/14';
+export const BOT_VERSION = 'bots/15';
 
 /**
  * Squire is a beginner: it looks one move ahead, half-sees threats (`caution`) and now and then settles for a lesser move (`slip`), never a wild one.
@@ -21,9 +21,9 @@ export const BOT_VERSION = 'bots/14';
  * It reads its own hand (`ownHand`: a Rally in it counts towards its next attacks). Before bots/14 it was the Knight's search with a check on its Heart.
  */
 export const PROFILES = {
-  squire: { name: 'Squire', blurb: 'Plays loosely: misses threats, and sometimes settles for a lesser move.', depth: 1, beam: 5, noise: 2.5, slip: 0.4, caution: 0.25 },
-  knight: { name: 'Knight', blurb: 'Plays soundly.', depth: 2, beam: 6, noise: 0.5, random: 0 },
-  warlock: { name: 'Warlock', blurb: 'Plans whole turns, and sees your answer coming.', depth: 2, beam: 6, noise: 0.05, reply: 6, plan: 2000, replyBudget: 400, deals: 2, ownHand: true },
+  squire: { name: 'Squire', blurb: 'Plays loosely: misses threats, and sometimes settles for a lesser move.', hold: 0.6, depth: 1, beam: 5, noise: 2.5, slip: 0.4, caution: 0.25 },
+  knight: { name: 'Knight', blurb: 'Plays soundly.', hold: 0.5, depth: 2, beam: 6, noise: 0.5, random: 0 },
+  warlock: { name: 'Warlock', blurb: 'Plans whole turns, and sees your answer coming.', depth: 2, beam: 6, noise: 0.05, reply: 6, plan: 2000, replyBudget: 400, deals: 2, ownHand: true, hold: 0.35 },
 };
 
 // ---- how good a position is ----------------------------------------------------------------------------------------------------------------
@@ -375,7 +375,9 @@ const finishTrace = (trace, kind, top) => { if (trace) { trace.kind = kind; trac
  * a Witch's Kiss that takes back a Witch's Kiss (they trade one for the other, for ever), a Witch's Kiss that takes a Shift out of a Chain (since bots/11:
  * the Shift goes back and forth, a card was wound three times in a game in one game in five), and a Fireball at the player's own card (skipping it costs nothing).
  */
+let holding = false;                                                      // set by a bot (see `makeBot`) for a turn in which it keeps its Witch's Kiss in hand
 const sensible = (game) => legalMoves(game).filter((m) => {
+  if (holding && m.type === 'cast' && m.spell === 'kiss') return false;
   if (m.type === 'cast' && m.spell === 'kiss') { const at = locate(game, m.targetId); if (at?.card.key === 'kiss' || (at?.zone === 'chain' && at.card.key === 'shift')) return false; }
   if (m.type === 'fireball' && locate(game, m.targetId)?.p.idx === game.turn) return false;
   return true;
@@ -430,7 +432,7 @@ export const TURN_LIMIT = 16;
  * (`seed`), so the same seed plays the same game. Use this, not `chooseMove`, when a bot plays a whole game.
  */
 export function makeBot(profile, seat, seed = 1) {
-  let x = seed >>> 0, turn = -1, made = 0;
+  let x = seed >>> 0, turn = -1, made = 0, heldTurn = -1, held = false;
   const memo = {};                                                        // the rest of a planned turn (the Warlock)
   const rng = () => ((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296);
   return {
@@ -443,7 +445,11 @@ export function makeBot(profile, seat, seed = 1) {
         if (trace) trace.kind = 'turn-limit';
         return all.find((m) => m.type === 'end') ?? all.find((m) => m.type === 'decline') ?? all.find((m) => m.type === 'skip');
       }
-      return chooseMove(game, seat, profile, rng, trace, memo);
+      // A Witch's Kiss played the moment it is held is easy to read. Each turn the bot decides, by chance, whether to keep it back (`hold`), so it comes out
+      // at different times. It never keeps it back once either Heart has been hit: then it is a race, and every card counts.
+      if (game.turnNumber !== heldTurn) { heldTurn = game.turnNumber; held = rng() < (profile.hold ?? 0) && !game.players.some((p) => p.hearts[0]?.spent); }
+      holding = held;
+      try { return chooseMove(game, seat, profile, rng, trace, memo); } finally { holding = false; }
     },
   };
 }

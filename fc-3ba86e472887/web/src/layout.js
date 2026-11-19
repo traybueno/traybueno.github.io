@@ -66,7 +66,7 @@ function sequence(row, heart, kept) {
  * `order`: for each player, the ids of their row from left to right, as they last stood (where the player put each card). `gap`: { owner, index } holds a
  * place open at that position of the owner's row. The result's `rows` gives each player's row as it now stands: [{ id, x }] left to right, `x` as the owner sees it.
  */
-export function layout(view, viewer, { gather = null, order = null, gap = null } = {}) {
+export function layout(view, viewer, { gather = null, order = null, gap = null, held = null } = {}) {
   const cards = [], slots = [], numerals = [], rows = [[], []];
   for (const P of view.players) {
     const side = P.idx === viewer ? 1 : -1;
@@ -108,11 +108,13 @@ export function layout(view, viewer, { gather = null, order = null, gap = null }
     // The hand, fanned along the near (or far) edge. The viewer's own hand is raised, leans back toward them and is a little larger, so it reads as
     // the cards in their hand rather than cards on the table; the other seat's hand is the same, as backs, a little smaller.
     const H = side > 0 ? HAND : FAR_HAND;
-    const n = P.hand.length, step = Math.min(3.5 * H.scale, n > 1 ? 16 / (n - 1) : 4);
-    P.hand.forEach((c, i) => {
+    const hand = gather?.length ? P.hand.filter((c) => c.id !== held) : P.hand;        // a Kiss that is cast has left the hand: the rest close up
+    const n = hand.length, step = Math.min(3.5 * H.scale, n > 1 ? 16 / (n - 1) : 4);
+    hand.forEach((c, i) => {
       const t = i - (n - 1) / 2;
       cards.push(place(c, side, { zone: 'hand', face: 1, order: i, ...at(t * step, H.z + 0.08 * t * t), y: H.lift + i * 0.08, spin: -t * 0.06, scale: H.scale }));
     });
+    if (hand !== P.hand) for (const c of P.hand) if (c.id === held) cards.push(place(c, side, { zone: 'hand', face: 1, ...at(0, H.z), y: H.lift, scale: H.scale }));   // (set out by `gathered`)
 
     // The draw pile (backs) and the discard pile (faces, the last card on top), each a little untidy so it reads as a stack.
     P.deck.forEach((c, i) => cards.push(place(c, side, { zone: 'deck', top: i === P.deck.length - 1, depth: P.deck.length - 1 - i, ...at(-DECK.x + jitter(c.id, 'x') * 0.025, DECK.z + jitter(c.id, 'z') * 0.025), y: 0.04 + i * 0.04, spin: jitter(c.id, 's') * 0.008 })));
@@ -127,21 +129,40 @@ export function layout(view, viewer, { gather = null, order = null, gap = null }
       if (c) cards.push(place(c, side, { zone: 'chain', ...s, y: 0.05, scale: CHAIN_SCALE }));
     }
   }
-  if (gather?.length) gathered(cards, gather);
+  if (gather?.length) gathered(cards, gather, held);
   return { cards, slots, numerals, rows };
 }
 
 /**
- * The cards a Witch's Kiss can take, brought up out of the piles and Chains they lie in and set out in one row, face up and raised over the near half of the
- * table (just below the prompt on the middle line), so they can all be seen and one tapped. In the order given; a little more space between cards from
- * different places (their Chain, their pile, your Chain, your pile). They keep their zone: only where they are drawn changes.
+ * The cards a Witch's Kiss can take, brought up out of the piles and Chains they lie in and laid out as a clean grid, face up and raised over the table
+ * (below the prompt on the middle line), so every one can be seen and one tapped: nothing overlaps, however many there are. They are in the order given, and the
+ * groups (their Chain, their pile, your Chain, your pile) follow one another with a little extra room between them, the opponent's first (nearest the top). The cards are as large as the room allows. They
+ * keep their zone: only where they are drawn changes. The Kiss itself (`held`), already cast, is held up above them.
  */
-function gathered(cards, ids) {
-  const at = new Map(cards.map((c, i) => [c.id, i])), row = ids.filter((id) => at.has(id)).map((id) => cards[at.get(id)]);
-  const group = (c) => `${c.owner}:${c.zone}`, GAP = 0.35, MAX = 26;
-  let w = 0; const xs = row.map((c, i) => (w += i ? (group(c) !== group(row[i - 1]) ? GAP : 0) + 1 : 0));
-  const step = Math.min(3.3, xs.length > 1 ? MAX / w : 3.3);
-  row.forEach((c, i) => { cards[at.get(c.id)] = { ...c, x: (xs[i] - w / 2) * step, z: 4.4, y: 1.6 + i * 0.05, yaw: 0, spin: 0, face: 1, scale: 1, dim: false, top: true, depth: 0 }; });
+export const GRID = { w: 36, top: -4.2, bottom: 10, gap: 0.3, between: 0.9 };
+function gathered(cards, ids, held) {
+  const at = new Map(cards.map((c, i) => [c.id, i])), list = ids.filter((id) => at.has(id)).map((id) => cards[at.get(id)]);
+  const group = (c) => `${c.owner}:${c.zone}`;
+  // Cards flow along a line and wrap; a little extra room marks where one group ends and the next begins. Larger cards are tried first.
+  const flow = (s) => {
+    const cw = CARD_W * s + GRID.gap, lines = [[]]; let used = 0;
+    list.forEach((c, i) => {
+      const extra = i && group(c) !== group(list[i - 1]) ? GRID.between * s : 0, need = (lines.at(-1).length ? extra : 0) + cw;
+      if (lines.at(-1).length && used + need > GRID.w) { lines.push([]); used = 0; }
+      const first = !lines.at(-1).length; used += first ? cw : need; lines.at(-1).push({ c, extra: first ? 0 : extra });
+    });
+    return { s, cw, lines };
+  };
+  let f = flow(1); for (const s of [1, 0.9, 0.8, 0.72, 0.65, 0.58, 0.52, 0.46]) { f = flow(s); if (f.lines.length * (CARD_H * s + GRID.gap) <= GRID.bottom - GRID.top) break; }
+  const ch = CARD_H * f.s + GRID.gap, z0 = (GRID.top + GRID.bottom) / 2 - (f.lines.length * ch) / 2 + ch / 2;
+  let i = 0;
+  f.lines.forEach((line, r) => {
+    const width = line.reduce((w, e) => w + f.cw + e.extra, 0); let x = -width / 2;
+    for (const { c, extra } of line) {
+      x += extra; cards[at.get(c.id)] = { ...c, x: x + f.cw / 2, z: z0 + r * ch, y: 1.6 + i++ * 0.02, yaw: 0, spin: 0, face: 1, scale: f.s, dim: false, top: true, depth: 0 }; x += f.cw;
+    }
+  });
+  if (held && at.has(held)) cards[at.get(held)] = { ...cards[at.get(held)], x: 0, z: GRID.top - 4.6, y: 2.4, yaw: 0, spin: 0, face: 1, scale: 0.9, dim: false, top: true, depth: 0 };
 }
 
 /** Where a card dropped with its centre at `x` (as its owner sees the table) goes in that owner's row: how many of the cards already there stand to its left. */

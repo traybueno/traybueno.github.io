@@ -9,9 +9,9 @@
  * Nothing here knows a rule: every move comes from the engine's `legalMoves`, is sent whole to `apply`, and every sentence is read from the state.
  * The log is the same format as a bot batch's observer log, so `replay` rebuilds a game from it and `analyze` (web/sim/analyze.js) reports on it.
  */
-import { newGame, legalMoves, apply, viewFor, locate, isGuarded, isBacked, protector, hasPortal, hasResolve, CARDS, DECK, CHAIN_MAX } from '../../src/index.js?v=c5cc373';
-import { LOG_SCHEMA, DEFAULT_LIMITS, POLICIES, prepare, snapshot, keyOf } from './match.js?v=c5cc373';
-import { PROFILES } from './bot.js?v=c5cc373';
+import { newGame, legalMoves, apply, viewFor, locate, isGuarded, isBacked, protector, hasPortal, hasResolve, CARDS, DECK, CHAIN_MAX } from '../../src/index.js?v=a027ba8';
+import { LOG_SCHEMA, DEFAULT_LIMITS, POLICIES, prepare, snapshot, keyOf } from './match.js?v=a027ba8';
+import { PROFILES } from './bot.js?v=a027ba8';
 
 export const AGENT_VERSION = 'agent/1';
 const bare = (s) => { const { events, ...rest } = s; return rest; };

@@ -12,8 +12,8 @@
  * enter spent and never ready, so any hit defeats them). Nothing else is stored on a card.
  * The end of the piles, per player: the draw that empties a player's own pile discards that player's Guardians, and while their pile is empty they can bring no Guardian into play.
  */
-import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=c5cc373';
-import { drawCards } from './state.js?v=c5cc373';
+import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=a027ba8';
+import { drawCards } from './state.js?v=a027ba8';
 
 /** The cards a Guardian may guard. */
 const GUARDABLE = ['heart', 'knight', 'maniac', 'angel', 'lantern', 'portal', 'resolve'];
@@ -61,6 +61,15 @@ const throughPortal = (s, seat, t) => t.owner !== seat && isGuarded(s, t) && has
 /** Is this card's standing effect in force right now? A Warp Portal and a Heaven's Resolve always are; a Lantern Keeper and an Angel are while ready. Any other card has none. (A pure query for a front end to mark them.) */
 export const inForce = (s, c) => c.key === 'portal' || c.key === 'resolve' || ((c.key === 'lantern' || c.key === 'angel') && !c.spent);
 export const protector = (s, seat) => s.players[seat].field.find((c) => c.key === 'angel' && !c.spent);
+/** The cards this card's standing effect is acting on right now, as ids (empty when it is not in force or touches nothing): a Warp Portal the enemy Guardians it lets attacks pass; a Heaven's Resolve its owner's attackers (the creatures a free Recover would stand); a ready Lantern Keeper the spent creatures it lights; the protecting Angel its owner's Heart. A pure query for a front end to tie a card to what it affects. */
+export const affects = (s, c) => {
+  const own = s.players[c.owner], foe = s.players[1 - c.owner];
+  if (c.key === 'portal') return foe.field.filter((g) => g.key === 'guardian').map((g) => g.id);
+  if (c.key === 'resolve') return own.field.filter(canAttack).map((g) => g.id);
+  if (c.key === 'lantern') return c.spent ? [] : own.field.filter((g) => g.id !== c.id && lit(s, g)).map((g) => g.id);
+  if (c.key === 'angel') return protector(s, c.owner)?.id === c.id && own.hearts[0] ? [own.hearts[0].id] : [];
+  return [];
+};
 /** What a Fireball can pick: any unguarded card that is not a Heart, either player's. */
 const fireballTargets = (s) => everything(s).filter((t) => !isGuarded(s, t) && t.key !== 'heart');
 /** What Behind You hits: every creature of either player that is not guarded, the caster's own too, taken as a snapshot before anything is hit. A Guardian is never guarded, so every Guardian is included. Hearts and devices are not creatures. (Enemy creatures only for part of 18 Nov 2026; both sides again since, so a second copy in the same Chain wipes the caster's open creatures too.) */

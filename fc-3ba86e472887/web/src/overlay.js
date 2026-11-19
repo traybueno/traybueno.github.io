@@ -4,12 +4,35 @@
  * never look like geometry. They fade in over a moment while settling a few pixels inward; the one under the pointer turns white and lengthens slightly.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=c5cc373';
+import { CARD_W, CARD_H } from './layout.js?v=a027ba8';
 
 const ARM = 11, ARM_FOCUS = 15, GAP = 3, GAP_FROM = 9, FADE_IN = 0.11, FADE_OUT = 0.09;
 const COLOR = { idle: '#efe7c6', idleRgb: [239, 231, 198], focus: '#ffffff' };
 const ease = (p) => 1 - Math.pow(1 - p, 3);
 const unit = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+/** The Warp Portal's idle beat: the swirl turns once every 4 seconds, and each enemy Guardian (the `i`th) thins for a moment just after an arm passes the top, one after another. */
+export const portalPulse = (t, i = 0) => { const u = (((t - 0.5 - i * 0.25) % 4) + 4) % 4; return u < 0.9 ? Math.sin(Math.PI * u / 0.9) : 0; };
+/** A Lantern Keeper's flame: an uneven flicker (never a smooth pulse), 0 to 1, that the Keeper and every creature it lights share. */
+export const flame = (t) => Math.min(1, Math.max(0, 0.62 + 0.2 * Math.sin(t * 6.1) + 0.12 * Math.sin(t * 13.7 + 1.3) + 0.08 * Math.sin(t * 23.3 + 4.1) - (Math.sin(t * 1.7) > 0.93 ? 0.35 : 0)));
+const frac = (x) => ((x % 1) + 1) % 1;
+const hash = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return (h >>> 0) / 4294967296; };
+/** A point inside the frame `q`: `a` of the way along it, `b` of the way down it (in the card's own terms). */
+const inside = (q, a, b) => { const top = [q[0][0] + (q[1][0] - q[0][0]) * a, q[0][1] + (q[1][1] - q[0][1]) * a], low = [q[3][0] + (q[2][0] - q[3][0]) * a, q[3][1] + (q[2][1] - q[3][1]) * a]; return [top[0] + (low[0] - top[0]) * b, top[1] + (low[1] - top[1]) * b]; };
+/** Where a level line at screen height `y` crosses the frame `q`: [left, right], or null if it misses. */
+function across(q, y) {
+  const xs = [];
+  for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4]; if ((a[1] - y) * (b[1] - y) <= 0 && a[1] !== b[1]) xs.push(a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])); }
+  return xs.length >= 2 ? [Math.min(...xs), Math.max(...xs)] : null;
+}
+/** A point `out` pixels outside the frame `q` (four screen corners), `s` of the way round it clockwise from the top left. */
+function around(q, s, out = 0) {
+  const L = q.map((p, i) => Math.hypot(q[(i + 1) % 4][0] - p[0], q[(i + 1) % 4][1] - p[1])), tot = L[0] + L[1] + L[2] + L[3];
+  let d = frac(s) * tot, i = 0; while (i < 3 && d > L[i]) { d -= L[i]; i++; }
+  const a = q[i], b = q[(i + 1) % 4], f = L[i] ? d / L[i] : 0, x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
+  const cx = (q[0][0] + q[2][0]) / 2, cy = (q[0][1] + q[2][1]) / 2; let [nx, ny] = unit(b[1] - a[1], a[0] - b[0]);
+  if (nx * (x - cx) + ny * (y - cy) < 0) { nx = -nx; ny = -ny; }
+  return [x + nx * out, y + ny * out, tot];
+}
 
 export class Overlay {
   constructor(scene) {
@@ -77,6 +100,7 @@ export class Overlay {
       const q = this.corners(it); if (!q) continue;
       entries.push({ it, q, a, tone, order: it.card ? this.scene.cards.get(it.card)?.order ?? 0 : -1 });
     }
+    for (const it of this.idleMarks()) { const q = this.corners(it); if (q) entries.unshift({ it, q, a: 1, order: this.scene.cards.get(it.card)?.order ?? 0 }); }   // before the marks, so a mark draws over an idle effect on the same card
     if (entries.length) {
       const L = this.layer ??= document.createElement('canvas');
       if (L.width !== cv.width || L.height !== cv.height) { L.width = cv.width; L.height = cv.height; }
@@ -84,9 +108,10 @@ export class Overlay {
       const covers = [], marked = new Map(entries.map((e) => [e.it.card, e]));
       for (const c of this.scene.cards.values()) { if (marked.has(c.id)) continue; const q = this.corners({ card: c.id }); if (q) covers.push({ order: c.order, q }); }
       const all = [...covers, ...entries].sort((x, y) => x.order - y.order);
+      const cleared = new Set();
       for (const e of all) {
-        if (!e.it || e.it.card) { m.globalCompositeOperation = 'destination-out'; m.globalAlpha = 1; m.fillStyle = '#000'; m.beginPath(); e.q.forEach((p, i) => (i ? m.lineTo(p[0], p[1]) : m.moveTo(p[0], p[1]))); m.closePath(); m.fill(); m.globalCompositeOperation = 'source-over'; }
-        if (e.it) this.marks(m, e.it, e.q, e.a, e.tone);
+        if (!e.it || (e.it.card && !cleared.has(e.it.card))) { if (e.it) cleared.add(e.it.card); m.globalCompositeOperation = 'destination-out'; m.globalAlpha = 1; m.fillStyle = '#000'; m.beginPath(); e.q.forEach((p, i) => (i ? m.lineTo(p[0], p[1]) : m.moveTo(p[0], p[1]))); m.closePath(); m.fill(); m.globalCompositeOperation = 'source-over'; }
+        if (e.it) e.it.idle ? this.idle(m, e.it, e.q) : this.marks(m, e.it, e.q, e.a, e.tone);
       }
       if (L.width && L.height) g.drawImage(L, 0, 0, W, H);                 // (the layer is empty until the first frame has a size)
     }
@@ -94,6 +119,85 @@ export class Overlay {
     this.ghost(g, dt);
     this.halos(g, dt);
     this.effects(g, dt);
+  }
+  /** The idle effects to draw this frame, one per card: { idle: kind, card, w, color, i, dev }. */
+  idleMarks() {
+    const sc = this.scene, out = [];
+    for (const [dev, d] of sc.idle ?? []) {
+      const on = (kind, card, i = 0) => { const w = d.w * sc.idleOf(dev, card); if (w > 0.01) out.push({ idle: kind, card, w, color: d.color, i, dev }); };
+      if (d.key === 'angel') { on('heart', d.ids[0]); continue; }
+      on(d.key, dev);
+      d.ids.forEach((id, i) => on({ portal: 'thin', lantern: 'lit', resolve: 'mote' }[d.key], id, i));
+    }
+    return out;
+  }
+  /**
+   * One card's idle effect, in square pixels of its device's colour (it.w scales it in and out). Clock: the scene's `idleT`, so effects tied together keep time.
+   *   portal  three short arms of dithered pixels circling the frame, once every 4 seconds
+   *   thin    a Guardian the Portal passes sheds a few purple pixels as it thins (the thinning itself is the card's own, scene.js)
+   *   lantern a ring of halftone dots round the Keeper, flickering like a flame
+   *   lit     a thin pixel edge round a creature the Keeper lights, flickering with the Keeper's flame
+   *   resolve gold pixels drifting up off the card, and every few seconds a band of light sweeping up the frame
+   *   mote    now and then a single gold pixel rising off one of the Resolve's attackers (each on its own time)
+   *   heart   the Heart an Angel would save: a breathing dotted outline in the Angel's colour
+   */
+  idle(g, it, q) {
+    const P = 4, t = this.scene.idleT, w = it.w, sq = (x, y, s = P) => g.fillRect(Math.round(x / P) * P - s / 2, Math.round(y / P) * P - s / 2, s, s);
+    const [, , tot] = around(q, 0), n = Math.max(8, Math.round(tot / P));
+    g.fillStyle = it.color;
+    if (it.idle === 'portal') {
+      for (let arm = 0; arm < 3; arm++) for (let i = 0; i < 14; i++) {
+        if (i > 6 && (i & 1)) continue;
+        const [x, y] = around(q, t / 4 + arm / 3 - i * 0.007, 5 + i * 0.25);
+        g.globalAlpha = w * 0.85 * (1 - i / 14); sq(x, y, i < 3 ? P * 1.5 : P);
+      }
+    } else if (it.idle === 'thin') {
+      const u = (((t - 0.5 - it.i * 0.25) % 4) + 4) % 4; if (u > 1.4) { g.globalAlpha = 1; return; }
+      const cyc = Math.floor((t - 0.5 - it.i * 0.25) / 4), h = u / 1.4;
+      for (let i = 0; i < 7; i++) {
+        const [x, y] = around(q, hash(it.card + i) + cyc * 0.37 + i * 0.13, 2 + h * 16);
+        if ((i + Math.floor(u * 12)) % 3 === 0) continue;
+        g.globalAlpha = w * 0.8 * (1 - h); sq(x, y - h * 6);
+      }
+    } else if (it.idle === 'lantern') {
+      const f = flame(t);
+      for (let i = 0; i < n; i += 2) {                          // big dots next to the frame, a fainter row of small ones outside them: halftone, as round the lantern in the art
+        const big = ((i / 2) & 1) === 0, [x, y] = around(q, i / n, 6), [x2, y2] = around(q, (i + 1) / n, 12);
+        g.globalAlpha = w * (0.4 + 0.6 * f) * (big ? 1 : 0.7); sq(x, y, big && f > 0.45 ? P : 2);
+        if (big && f > 0.35) { g.globalAlpha = w * 0.45 * f; sq(x2, y2, 2); }
+      }
+    } else if (it.idle === 'lit') {
+      const f = flame(t);
+      const m = n * 2;                                          // a crisp line of small squares hugging the frame; at a low flicker every other one drops out
+      for (let i = 0; i < m; i++) {
+        if ((i & 1) && f < 0.5) continue;
+        const [x, y] = around(q, i / m, 3);
+        g.globalAlpha = w * (0.4 + 0.55 * f); g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
+        if (i % 12 === 0 && f > 0.6) { const [x2, y2] = around(q, i / m, 6); g.globalAlpha = w * 0.6 * f; sq(x2, y2, 2); }
+      }
+    } else if (it.idle === 'resolve') {                         // up is up on screen, whichever way the card lies (a device lies sideways)
+      const ys = q.map((p) => p[1]), top = Math.min(...ys), bot = Math.max(...ys), tall = bot - top;
+      for (let i = 0; i < 6; i++) {
+        const h = frac(t / 3.2 + i / 6), k = Math.floor(t / 3.2 + i / 6), [x0, y0] = inside(q, 0.15 + 0.7 * frac(i * 0.618 + k * 0.29), 0.2 + 0.6 * frac(i * 0.41 + k * 0.53));
+        g.globalAlpha = w * 0.8 * (1 - h) * Math.min(1, h * 6); sq(x0, y0 - h * tall * 0.6);
+      }
+      const u = frac(t / 5) * 5; if (u < 1.1) {                 // the band: from the bottom of the card to the top, over a second
+        const y = bot - (u / 1.1) * tall, fade = Math.sin(Math.PI * u / 1.1);
+        for (let r = 0; r < 2; r++) {
+          const span = across(q, y + r * P); if (!span) continue;
+          for (let x = span[0] + P / 2; x <= span[1] - P / 2; x += P) { if (r && (Math.round(x / P) & 1)) continue; g.globalAlpha = w * fade * (r ? 0.25 : 0.5); sq(x, y + r * P); }
+        }
+      }
+    } else if (it.idle === 'mote') {
+      const per = 3.4, ph = t / per + hash(it.card), u = frac(ph) * per; if (u < 1.3) {
+        const h = u / 1.3, k = Math.floor(ph), ys = q.map((p) => p[1]), tall = Math.max(...ys) - Math.min(...ys), [x, y] = inside(q, 0.2 + 0.6 * hash(it.card + k), 0.25 + 0.3 * hash(k + it.card + 'y'));
+        g.globalAlpha = w * 0.85 * (1 - h) * Math.min(1, h * 5); sq(x, y - h * tall * 0.55);
+      }
+    } else if (it.idle === 'heart') {
+      const b = 0.5 + 0.5 * Math.sin(t * 1.6);
+      for (let i = 0; i < n; i++) { if (i & 1) continue; const [x, y] = around(q, i / n, 5 + b); g.globalAlpha = w * (0.35 + 0.3 * b); sq(x, y, 2); }
+    }
+    g.globalAlpha = 1;
   }
   /**
    * The mark of one target, on layer `g`: a short corner at each corner of the card.

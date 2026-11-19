@@ -7,18 +7,18 @@
  * while you watch from seat 0 (`?seat=1` flips the view); `?learn` opens Learn to play (tutorial.js); `?vs=anim` is the animation board (made-up positions and a menu of effects to replay, see animboard.js); the Bot vs Bot game's compact log is `fcLog()` in the console. Dev aids: ?bot=squire|knight|warlock skips the start screen, ?seed=N picks the deal, ?plies=K plays K random
  * legal moves first (a mid-game position to try things on), ?seat=0|1 fixes who is looking, key N deals a new game.
  */
-import { newGame, legalMoves, apply, viewFor, CARDS } from '../../src/index.js?v=c5cc373';
-import { loadArt } from './assets.js?v=c5cc373';
-import { Scene } from './scene.js?v=c5cc373';
-import { Input } from './input.js?v=c5cc373';
-import { createSound } from './sound.js?v=c5cc373';
-import { createMusic } from './music.js?v=c5cc373';
-import { createUI } from './ui.js?v=c5cc373';
-import { makeBot, PROFILES } from './bot.js?v=c5cc373';
-import { MatchLog } from './match.js?v=c5cc373';
-import { SCENARIOS, build, stepMove } from './animboard.js?v=c5cc373';
-import { STORY, Tutor, buildLesson } from './tutorial.js?v=c5cc373';
-import { createGuide } from './guide.js?v=c5cc373';
+import { newGame, legalMoves, apply, viewFor, CARDS } from '../../src/index.js?v=a027ba8';
+import { loadArt } from './assets.js?v=a027ba8';
+import { Scene } from './scene.js?v=a027ba8';
+import { Input } from './input.js?v=a027ba8';
+import { createSound } from './sound.js?v=a027ba8';
+import { createMusic } from './music.js?v=a027ba8';
+import { createUI } from './ui.js?v=a027ba8';
+import { makeBot, PROFILES } from './bot.js?v=a027ba8';
+import { MatchLog } from './match.js?v=a027ba8';
+import { SCENARIOS, build, stepMove } from './animboard.js?v=a027ba8';
+import { STORY, Tutor, buildLesson } from './tutorial.js?v=a027ba8';
+import { createGuide } from './guide.js?v=a027ba8';
 
 const params = new URLSearchParams(location.search);
 const hotseat = params.get('vs') === 'hotseat', watch = params.get('vs') === 'bots', anim = params.get('vs') === 'anim';
@@ -51,7 +51,7 @@ try {
   const music = createMusic();                                             // the music (music.js): the start screen's track, then a game's; its own On/Off beside the effects
 
   let tutor = null;                                                         // Learn to play (tutorial.js): the story being played, if any
-  let game, viewer, bots = [], log = null, gather = null, botTimer = null, autoTimer = null, botMoves = 0, overTimer = null, note = '', noteTimer = null, paused = false;
+  let game, viewer, bots = [], log = null, gather = null, gatherHeld = null, botTimer = null, autoTimer = null, botMoves = 0, overTimer = null, note = '', noteTimer = null, paused = false;
   const SPEEDS = { normal: 1, fast: 0.55, off: 0 };
   let speed = (() => { try { return SPEEDS[localStorage.getItem('fc-speed')] !== undefined ? localStorage.getItem('fc-speed') : 'normal'; } catch { return 'normal'; } })();
   scene.fx.speed = SPEEDS[speed];
@@ -71,7 +71,7 @@ try {
   ];
   const input = new Input(scene, {
     onMove: (m) => play(m),
-    onGather: (ids) => { if (JSON.stringify(ids) !== JSON.stringify(gather)) { gather = ids; scene.show(viewFor(game, viewer), viewer, { gather }); } },
+    onGather: (ids, held = null) => { if (JSON.stringify([ids, held]) !== JSON.stringify([gather, gatherHeld])) { gather = ids; gatherHeld = ids ? held : null; scene.show(viewFor(game, viewer), viewer, { gather, held: gatherHeld }); } },
     onChange: () => hint(),
     onPreview: (key) => ui.preview(key),
   });
@@ -97,7 +97,7 @@ try {
     const view = viewFor(game, viewer), all = anim || game.phase === 'over' || botsTurn() ? [] : legalMoves(game), moves = tutor ? tutor.allowed(game, all) : all;      // the story offers only the moves it teaches
     if (tutor) ui.lesson(tutor.banner(game));
     ui.cont(tutor?.telling(game) && !paused ? () => { tutor.next(game); sync(); } : null);      // Learn to play: a line to read waits for Continue (the opponent waits too)
-    scene.show(view, viewer, { snap, gather, events: animate ? view.events : null }); input.setContext({ view, moves, seat: viewer });
+    scene.show(view, viewer, { snap, gather, held: gatherHeld, events: animate ? view.events : null }); input.setContext({ view, moves, seat: viewer });
     ui.buttons(input.buttons); hint(); guide.set(!!tutor && !paused && (moves.length > 0 || tutor.telling(game)));
     document.title = anim ? 'Field + Chain · Animation board' : `Field + Chain · ${watch ? `Bot ${game.turn + 1}` : botsTurn() ? 'Opponent' : 'Your'} turn`;
     window.fc = { game, viewer, view, scene, input };
@@ -128,7 +128,7 @@ try {
   }
   function start() {
     tutor = null; ui.lesson(null); ui.cont(null); guide.set(false);
-    clearTimeout(botTimer); clearTimeout(autoTimer); clearTimeout(overTimer); clearTimeout(noteTimer); note = ''; botMoves = 0; gather = null; music.game(); scene.sound.play('shuffle');
+    clearTimeout(botTimer); clearTimeout(autoTimer); clearTimeout(overTimer); clearTimeout(noteTimer); note = ''; botMoves = 0; gather = gatherHeld = null; music.game(); scene.sound.play('shuffle');
     game = plies ? dealt(seed, plies) : newGame(seed);
     // `?try=<scenario id>` (an animation-board position, animboard.js) is played by hand instead of replayed; a Chain scenario starts with the Chain released.
     const tried = SCENARIOS.find((x) => x.id === params.get('try'));
@@ -143,7 +143,7 @@ try {
   }
   /** Learn to play: one pretend game against a rival (tutorial.js). The rival plays the story's script; only the moves the story teaches are offered. */
   function startStory() {
-    clearTimeout(botTimer); clearTimeout(autoTimer); clearTimeout(overTimer); clearTimeout(noteTimer); note = ''; botMoves = 0; gather = null; music.game(); scene.sound.play('shuffle');
+    clearTimeout(botTimer); clearTimeout(autoTimer); clearTimeout(overTimer); clearTimeout(noteTimer); note = ''; botMoves = 0; gather = gatherHeld = null; music.game(); scene.sound.play('shuffle');
     tutor = new Tutor(STORY); game = buildLesson(STORY); viewer = HUMAN; bots = [null, tutor.foe()]; log = null;
     ui.hideTitle(); ui.clearWin(); ui.closePanels(); ui.menuButton(true); paused = false; input.enabled = true;
     scene.fx.flush(); scene.clear(); sync({ animate: true });       // as a game is dealt: the opening hands are drawn (buildLesson gives the draw events)
@@ -178,7 +178,7 @@ try {
     if (anim || watch || hotseat || params.has('bot') || params.has('learn') || plies) { location.search = ''; return; }
     clearTimeout(botTimer); clearTimeout(autoTimer); clearTimeout(overTimer); clearTimeout(noteTimer); note = ''; paused = false;
     tutor = null; ui.lesson(null); ui.cont(null); guide.set(false); ui.clearWin(); bots = [];
-    scene.fx.flush(); scene.clear(); input.enabled = true; gather = null;
+    scene.fx.flush(); scene.clear(); input.enabled = true; gather = gatherHeld = null;
     game = newGame(seed); viewer = HUMAN; sync({ snap: true }); choose();
   }
   /** The pause menu (the corner Menu button or Esc): the bot and any automatic move wait, the table takes no input, until it closes. */
@@ -237,7 +237,7 @@ try {
   }
   window.fcLog = () => (log ? log.text() : '');       // dev: the compact log of a Bot vs Bot game so far
   window.fcPlay = (m) => play(m); window.fcMoves = () => legalMoves(game);       // dev: make a move, list the moves
-  window.fcLoad = (g) => { clearTimeout(botTimer); clearTimeout(overTimer); game = g; gather = null; viewer = fixedSeat ?? (hotseat ? g.turn : HUMAN); ui.clearWin(); sync({ snap: true }); };       // dev: show a given game state
+  window.fcLoad = (g) => { clearTimeout(botTimer); clearTimeout(overTimer); game = g; gather = gatherHeld = null; viewer = fixedSeat ?? (hotseat ? g.turn : HUMAN); ui.clearWin(); sync({ snap: true }); };       // dev: show a given game state
   // Esc: back one panel; otherwise, during play, open the menu. A card picked up or a choice in progress is let go first (input.js), so this
   // listens in the capture phase to see that before input.js clears it.
   addEventListener('keydown', (e) => {

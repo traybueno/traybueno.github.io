@@ -5,7 +5,7 @@
  * `aim` sets where it should be (a placement from layout.js plus any hover or drag change); each frame `update` carries it there.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=c5cc373';
+import { CARD_W, CARD_H } from './layout.js?v=a027ba8';
 
 const R = 0.14;
 function rounded(w, h, r) {
@@ -85,7 +85,7 @@ export class Card {
     this.veilMat = new THREE.ShaderMaterial({ ...VEIL, transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
       uniforms: { uColor: { value: new THREE.Color() }, uAmount: { value: 0 }, uAlpha: { value: 1 }, uShape: { value: 0 }, uSeed: { value: Math.random() * 100 }, uSpin: { value: 0 } } });
     this.veil = new THREE.Mesh(face, this.veilMat); this.veil.visible = false;
-    this.fade = 1; this.tilt = 0; this.bright = 0;  // set by fx.js for a moment: how solid the card is (1 solid), how far it tips back (radians), how much a spent card is lit up (0 to 1)
+    this.fade = 1; this.tilt = 0; this.bright = 0; this.idleFade = 1;  // idleFade: set every frame by the scene (a Guardian thinning under a Warp Portal); set by fx.js for a moment: how solid the card is (1 solid), how far it tips back (radians), how much a spent card is lit up (0 to 1)
     this.flat.add(this.shadow, this.edge, this.front, this.veil, this.glow);
     this.s = Object.fromEntries(AXES.map((a) => [a, new Spring(0)]));
   }
@@ -138,7 +138,8 @@ export class Card {
     this.shadow.visible = !buried; this.glow.visible = this.flashT > 0;
     this.edge.visible = this.base?.zone === 'deck';                       // only a deck has a visible thickness; on any other card an offset edge reads as a stray line in the card's colour
     this.frontMat.color.setScalar(Math.min(1, this.dim + 0.5 * this.bright));
-    this.frontMat.opacity = this.fade; this.shadowMat.opacity *= this.fade;
+    const solid = this.fade * this.idleFade;
+    this.frontMat.opacity = solid; this.shadowMat.opacity *= solid;
     this.flat.rotation.x = this.tilt;
     const u = this.veilMat.uniforms; this.veil.visible = u.uAmount.value > 0.001 && u.uAlpha.value > 0.001;
     // Draw order: higher cards over lower ones; within a card, shadow, edge, face, flash.

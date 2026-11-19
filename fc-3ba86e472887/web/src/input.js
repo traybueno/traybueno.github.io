@@ -3,9 +3,9 @@
  * accepted. A drop on a legal target makes that move (asking a second question in place if the move is not yet complete); a drop anywhere else lets
  * the card go back where it came from.
  */
-import { CARDS, isGuarded, locate } from '../../src/index.js?v=c5cc373';
-import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=c5cc373';
-import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=c5cc373';
+import { CARDS, isGuarded, locate } from '../../src/index.js?v=a027ba8';
+import { analyze, dropsOf, nextStep, dropKey, promptFor, gatherOf } from './actions.js?v=a027ba8';
+import { fieldZone, pileZone, slotRect, handSpot } from './layout.js?v=a027ba8';
 
 const MOVE_PX = 7;
 const inRect = (p, r, m = 0.5) => Math.abs(p.x - r.x) <= r.w / 2 + m && Math.abs(p.z - r.z) <= r.d / 2 + m;
@@ -46,7 +46,8 @@ export class Input {
     if (this.auto && this.sources.has(this.auto)) this.pick(this.auto);       // the card the moment is about cannot be put down
     this.refresh();
   }
-  cancel() { if (this.sel || this.choice || this.drag) { this.sound('return', this.sel ?? this.drag); this.reset(); } }
+  cancel() { if (this.gathered) return;                                 // a Witch's Kiss that is cast cannot be taken back: one of its cards has to be chosen
+    if (this.sel || this.choice || this.drag) { this.sound('return', this.sel ?? this.drag); this.reset(); } }
   /** A card sound (sound.js), placed left or right by where card `id` is. */
   sound(name, id) { const c = id && this.scene.cards.get(id); this.scene.sound?.play(name, { pan: (c?.s.x.x ?? 0) / 20 }); }
   get seat() { return this.ctx?.seat; }
@@ -132,6 +133,7 @@ export class Input {
 
   startDrag(id, ndc) {
     this.select(id);
+    if (this.gathered) { this.down = null; return; }                    // a Witch's Kiss is cast by picking it up: it is held up, its cards are laid out, and one is clicked
     this.drag = id; this.scene.hover = null; this.scene.press = null; this.cb.onPreview(null);
     // The card is carried by the point it was grabbed at, a little above where it lay, and does not jump to the pointer.
     const c = this.scene.cards.get(id); this.carryY = Math.max(0.9, c.s.y.x);
@@ -161,7 +163,7 @@ export class Input {
     if (this.sel) {
       const key = this.targetAt(ndc, this.sel);
       if (key) { this.landed(key); return this.resolve(this.drops.get(key).moves, this.sel, this.scene.pointAt(ndc)?.x); }
-      if (src && src !== this.sel) return this.select(src);
+      if (src && src !== this.sel && !this.gathered) return this.select(src);
       if (this.gathered && src !== this.sel && this.scene.cardsAt(ndc).length) return;     // while a Kiss's cards are up, a near miss on another card keeps them up; the empty table, the Kiss itself or Esc puts it away
       return this.cancel();
     }
@@ -175,7 +177,7 @@ export class Input {
   pick(id) {
     const moves = this.sources.get(id), ids = gatherOf(this.ctx.view, moves, this.seat);
     this.sel = id; this.drops = dropsOf(this.ctx.view, moves, this.seat, { open: !!ids }); this.focus = null;
-    this.gathered = ids; this.cb.onGather(ids);
+    this.gathered = ids; this.cb.onGather(ids, ids ? id : null);
   }
   /** A drop on a guarded card by something that attacks or hits: it blocks, with a flash. (Front end only: the engine never offers it.) */
   blocked(ndc, id) {
@@ -203,6 +205,7 @@ export class Input {
     // While a Chain resolves, the spell that is up always wears the pulsing corners of something that acts now, whatever it asks for next.
     const head = view.phase === 'chain' && view.turn === this.seat ? view.players[this.seat].chain[0] : null;
     if (head) card(head.id, 'ready');
+    if (view.phase === 'bonus' && this.auto) card(this.auto, 'ready');       // a second attack (a Maniac's, or a Knight pair's) is picked up for you, but its attacker wears the same corners as any card that can act
     if (this.choice) {
       const st = this.choice.step, name = nameOf(view, this.choice.src);
       if (st.kind === 'arrange') {
@@ -221,7 +224,7 @@ export class Input {
         else if (drop.type === 'pile') { w.set(key, sc.rectBracket(pileZone(drop.owner === this.seat ? 1 : -1), level)); }
         else w.set(key, sc.rectBracket(fieldZone(1), level));
       }
-      this.hintText = promptFor(view, this.sources.get(this.sel), this.seat);
+      this.hintText = this.gathered ? `${nameOf(view, this.sel)}: click the card to take.` : promptFor(view, this.sources.get(this.sel), this.seat);
     } else {
       for (const id of this.sources.keys()) card(id, 'ready');            // on your turn, whatever can be moved is marked, and the marks pulse gently
       this.hintText = '';

@@ -3,12 +3,13 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=c5cc373';
-import { Table } from './table.js?v=c5cc373';
-import { Overlay } from './overlay.js?v=c5cc373';
-import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=c5cc373';
-import { Fx } from './fx.js?v=c5cc373';
-import { protector, inForce } from '../../src/index.js?v=c5cc373';
+import { Card, SPRING } from './card.js?v=a027ba8';
+import { Table } from './table.js?v=a027ba8';
+import { Overlay } from './overlay.js?v=a027ba8';
+import { layout, rowIndexAt, VIEW, TABLE } from './layout.js?v=a027ba8';
+import { Fx } from './fx.js?v=a027ba8';
+import { protector, inForce, affects } from '../../src/index.js?v=a027ba8';
+import { portalPulse } from './overlay.js?v=a027ba8';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 
@@ -34,6 +35,9 @@ export class Scene {
     this.row = [[], []];                                    // each player's row as it stands, left to right: [{ id, x }]. A card the player drops on the field stays where it was put.
     this.placing = null;                                    // { owner, id, x }: the card just dropped on the field, and where (the next `show` puts it in the row there)
     this.gap = null;                                        // { owner, index }: a place held open in a row for the card being carried
+    this.idle = new Map();                                  // device id -> { key, ids, color, w }: a standing effect in force and the cards it acts on; w eases 0..1 (it fades in and out)
+    this.quiet = new Map();                                 // card id -> 0..1: 0 while the move playing now moves or marks that card (its idle effect steps aside), back to 1 after
+    this.idleT = 0;                                         // the idle effects' shared clock (a Keeper and the creatures it lights flicker on the same beat)
     this.haloHold = new Set();                              // Hearts whose ring stays a moment longer (an Angel is about to be defeated saving them)
     this.camBase = new THREE.Vector3(); this.cam = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, tx: 0, ty: 0, tz: 0, k: 220 };   // a small push on the camera
     this.fx = new Fx(this);
@@ -73,26 +77,30 @@ export class Scene {
    * Make the scene match `view`, as seen by `viewer`. `snap` puts every card straight in place (a change of seat); `gather`: the ids of the cards a Witch's Kiss can take, brought up into one row.
    * `events` are the events of the move that led here (from the same view): they say how the cards got where they are, and the motion plays from them.
    */
-  show(view, viewer, { snap = false, gather = null, events = null } = {}) {
-    this.view = view; this.viewer = viewer; this.gather = gather; this.gap = null;
+  show(view, viewer, { snap = false, gather = null, held = null, events = null } = {}) {
+    this.view = view; this.viewer = viewer; this.gather = gather; this.held = held; this.gap = null;
     const order = this.row.map((r) => r.map((e) => e.id));
     if (this.placing) {                                      // a card dropped on the field takes the place it was dropped at, among the cards already standing
       const { owner, id, x } = this.placing; this.placing = null;
       const joins = view.players[owner].field.some((c) => c.id === id && !(c.key === 'guardian' && c.guards));
       if (joins && !order[owner].includes(id)) order[owner].splice(rowIndexAt(this.row[owner], x), 0, id);
     }
-    const L = layout(view, viewer, { gather, order }), next = new Map(L.cards.map((p) => [p.id, p]));
+    const L = layout(view, viewer, { gather, order, held }), next = new Map(L.cards.map((p) => [p.id, p]));
     this.row = L.rows;
     this.fx.flush();                                        // whatever the last move was still doing is finished off at once
     const spawn = events && !snap ? this.fx.plan(events, this.poses, next, view, viewer) : new Map();
     this.layout = L; this.poses = next;
     // A ring marks a standing effect that is in force: the Heart an Angel would save, and every Warp Portal, Heaven's Resolve and ready Lantern Keeper.
+    // Each standing effect in force idles, in its card's colour, with the cards it acts on (engine `affects`); an Angel's shows on the Heart it would save.
+    const want = new Map(view.players.flatMap((P) => P.field.filter((c) => inForce(view, c)).map((c) => [c.id, { key: c.key, ids: affects(view, c) }])).filter(([, d]) => d.key !== 'angel' || d.ids.length));
+    for (const [id, d] of this.idle) if (!want.has(id)) d.gone = true;
+    for (const [id, d] of want) { const o = this.idle.get(id); if (o) Object.assign(o, d, { gone: false }); else this.idle.set(id, { ...d, color: this.fx.tint(d.key), w: 0, gone: false }); }
     this.halos = new Set(view.players.flatMap((P) => [...(protector(view, P.idx) && P.hearts[0] ? [P.hearts[0].id] : []), ...P.field.filter((c) => c.key !== 'angel' && inForce(view, c)).map((c) => c.id)]));
     this.table.setTurn(view.turn === viewer ? 1 : -1, snap);
     this.applyLayout(snap, spawn); this.table.place(L);
     this.fx.update(0);                                      // what starts at once starts before the first frame
   }
-  haloIds() { return new Set([...(this.halos ?? []), ...this.haloHold]); }
+  haloIds() { return new Set(); }                          // the thin standing-effect outline is switched off for now (the effect rings that flash when something happens are separate)
   /** Remove every card (a new game). */
   clear() { for (const c of this.cards.values()) this.scene.remove(c.root); this.cards.clear(); this.poses = new Map(); this.row = [[], []]; this.placing = this.gap = null; this.fx.flush(); this.hover = this.drag = this.press = this.picked = null; }
   /**
@@ -104,7 +112,7 @@ export class Scene {
     const gap = x === null || x === undefined ? null : { owner, index: rowIndexAt(this.row[owner] ?? [], x) };
     if (gap?.index === this.gap?.index && gap?.owner === this.gap?.owner) return;
     this.gap = gap;
-    const L = layout(this.view, this.viewer, { gather: this.gather, order: this.row.map((r) => r.map((e) => e.id)), gap });
+    const L = layout(this.view, this.viewer, { gather: this.gather, held: this.held, order: this.row.map((r) => r.map((e) => e.id)), gap });
     for (const p of L.cards) { const c = this.cards.get(p.id); if (c && p.zone === 'field' && c.base) c.base = p; }
   }
   applyLayout(snap, spawn) {
@@ -147,6 +155,7 @@ export class Scene {
   /** Advance every card's motion by `dt` seconds. */
   step(dt) {
     this.fx.update(dt); this.table.update(dt); this.moveCamera(dt);
+    this.stepIdle(dt);
     for (const c of this.cards.values()) {
       if (!c.base) continue;
       c.aim(this.poseOf(c), this.drag?.id === c.id ? SPRING.follow : c.held ? c.held.spring : this.hover?.id === c.id ? SPRING.hover : SPRING.settle);
@@ -154,6 +163,23 @@ export class Scene {
       c.update(dt, this.camera.quaternion);
     }
   }
+  /**
+   * The idle effects: each device's weight eases toward 1 while it is in force (0 once it is gone), each card's `quiet` toward 0 while the move playing now
+   * involves it, and a Guardian a Warp Portal passes thins a little once each turn of the Portal's swirl (see overlay.js `idle` for the pixels).
+   */
+  stepIdle(dt) {
+    this.idleT += dt;
+    const busy = this.fx.busy ? this.fx.ids : null, e = (r) => 1 - Math.exp(-dt * r);
+    for (const [id, d] of this.idle) { d.w += ((d.gone ? 0 : 1) - d.w) * e(d.gone ? 8 : 5); if (d.gone && d.w < 0.01) this.idle.delete(id); }
+    const seen = new Set([...this.idle.keys(), ...[...this.idle.values()].flatMap((d) => d.ids)]);
+    for (const id of seen) { const q = this.quiet.get(id) ?? 0; this.quiet.set(id, q + ((busy?.has(id) ? 0 : 1) - q) * e(busy?.has(id) ? 10 : 5)); }
+    for (const id of this.quiet.keys()) if (!seen.has(id)) this.quiet.delete(id);
+    const thin = new Map();
+    for (const [pid, d] of this.idle) if (d.key === 'portal') d.ids.forEach((gid, i) => thin.set(gid, Math.max(thin.get(gid) ?? 0, d.w * this.idleOf(pid, gid) * 0.17 * portalPulse(this.idleT, i))));
+    for (const c of this.cards.values()) c.idleFade = 1 - (thin.get(c.id) ?? 0);
+  }
+  /** How strongly an idle effect shows on `id`: the device's own weight aside, 0 while the move playing now involves the card or its device. */
+  idleOf(device, id) { return (this.quiet.get(device) ?? 0) * (id === device ? 1 : this.quiet.get(id) ?? 0); }
   /** A small push on the camera: it moves `dx, dz` and eases back (an impact); `lean` instead holds it moved (a slow push in). */
   nudge(dx, dz) { const v = Math.sqrt(this.cam.k) * Math.E; this.cam.vx += dx * v; this.cam.vz += dz * v; }
   lean(dx, dy, dz) { Object.assign(this.cam, { tx: dx, ty: dy, tz: dz, k: dx || dy || dz ? 14 : 220 }); }
