@@ -6,7 +6,7 @@
  *   drop    a place a source can be dropped: a card, a Chain slot, a discard pile, or the player's own field
  *   step    what happens after a drop: commit the one move left, or ask for a second choice
  */
-import { locate, CARDS } from '../../src/index.js?v=b3f8a59';
+import { locate, CARDS } from '../../src/index.js?v=42b2104';
 
 export const dropKey = {
   card: (id) => `card:${id}`,

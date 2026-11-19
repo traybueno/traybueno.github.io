@@ -3,14 +3,14 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=b3f8a59';
-import { Table } from './table.js?v=b3f8a59';
-import { Overlay } from './overlay.js?v=b3f8a59';
-import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=b3f8a59';
-import { phone, phoneArea } from './phone.js?v=b3f8a59';
-import { Fx } from './fx.js?v=b3f8a59';
-import { protector, inForce, affects } from '../../src/index.js?v=b3f8a59';
-import { portalPulse } from './overlay.js?v=b3f8a59';
+import { Card, SPRING } from './card.js?v=42b2104';
+import { Table } from './table.js?v=42b2104';
+import { Overlay } from './overlay.js?v=42b2104';
+import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=42b2104';
+import { phone, phoneArea } from './phone.js?v=42b2104';
+import { Fx } from './fx.js?v=42b2104';
+import { protector, inForce, affects } from '../../src/index.js?v=42b2104';
+import { portalPulse } from './overlay.js?v=42b2104';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 

@@ -6,8 +6,8 @@
  *
  *   const guide = createGuide(scene, input);   guide.set(on)   on: show it for the moves the input now offers (false hides it)
  */
-import { dropsOf } from './actions.js?v=b3f8a59';
-import { slotRect, pileZone, fieldZone } from './layout.js?v=b3f8a59';
+import { dropsOf } from './actions.js?v=42b2104';
+import { slotRect, pileZone, fieldZone } from './layout.js?v=42b2104';
 
 // A classic arrow pointer drawn on a pixel grid: 1 is the outline, 2 the fill.
 const ARROW = [

@@ -13,8 +13,8 @@
  * enter spent and never ready, so any hit defeats them). Nothing else is stored on a card.
  * The end of the piles, per player: the draw that empties a player's own pile discards that player's Guardians, and while their pile is empty they can bring no Guardian into play.
  */
-import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=b3f8a59';
-import { drawCards } from './state.js?v=b3f8a59';
+import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=42b2104';
+import { drawCards } from './state.js?v=42b2104';
 
 /** The cards a Guardian may guard. */
 const GUARDABLE = ['heart', 'knight', 'maniac', 'angel', 'lantern', 'portal', 'resolve'];

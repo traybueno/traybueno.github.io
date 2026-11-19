@@ -8,10 +8,10 @@
  * looks a few moves further along its own turn (a deploy, an instant and an attack are one turn) before picking. The profiles differ in how far they
  * look, how much noise there is in their judgement, how much a threat counts, how often they settle for a lesser move, and whether they weigh the answer.
  */
-import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=b3f8a59';
+import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate, canStrike, guardiansOf } from '../../src/index.js?v=42b2104';
 
-/** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. bots/18 (19 Nov 2026, spent audit): a spent Angel still saves and a spent Keeper still lights, so both keep most of their value; a spent Maniac counts as an attacker. bots/17 (19 Nov 2026): one free Guardian move a turn; it is judged where it leaves the Guardian when the turn ends (see `chooseMove`). bots/16 had a loop guard for unlimited moves, no longer needed. */
-export const BOT_VERSION = 'bots/18';
+/** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. bots/19 (19 Nov 2026, bot update for the day's rules): a Shadow Step counts with any Knight or Maniac, spent too, once per copy wound; a spent Heart under a Lantern Keeper is not opened by taking its Guardians off; Behind You counts against Guardians; open devices count as exposed (one hit defeats them); Heaven's Resolve is worth more with defenders on the board. bots/18 (19 Nov 2026, spent audit): a spent Angel still saves and a spent Keeper still lights, so both keep most of their value; a spent Maniac counts as an attacker. bots/17 (19 Nov 2026): one free Guardian move a turn; it is judged where it leaves the Guardian when the turn ends (see `chooseMove`). bots/16 had a loop guard for unlimited moves, no longer needed. */
+export const BOT_VERSION = 'bots/19';
 
 /**
  * Squire is a beginner: it looks one move ahead, half-sees threats (`caution`) and now and then settles for a lesser move (`slip`), never a wild one.
@@ -21,9 +21,9 @@ export const BOT_VERSION = 'bots/18';
  * It reads its own hand (`ownHand`: a Rally in it counts towards its next attacks). Before bots/14 it was the Knight's search with a check on its Heart.
  */
 export const PROFILES = {
-  squire: { name: 'Squire', blurb: 'Plays loosely: misses threats, and sometimes settles for a lesser move.', hold: 0.6, depth: 1, beam: 5, noise: 2.5, slip: 0.4, caution: 0.25 },
+  squire: { name: 'Squire', blurb: 'Plays loosely: misses threats, and sometimes settles for a lesser move.', hold: 0.6, depth: 1, beam: 5, noise: 2.5, slip: 0.5, slipRange: 8, caution: 0.2 },
   knight: { name: 'Knight', blurb: 'Plays soundly.', hold: 0.5, depth: 2, beam: 6, noise: 0.5, random: 0 },
-  warlock: { name: 'Warlock', blurb: 'Plans whole turns, and sees your answer coming.', depth: 2, beam: 6, noise: 0.05, reply: 6, plan: 2000, replyBudget: 400, deals: 2, ownHand: true, hold: 0.35 },
+  warlock: { name: 'Warlock', blurb: 'Plans whole turns, and sees your answer coming.', depth: 2, beam: 6, noise: 0.05, reply: 6, plan: 2000, replyBudget: 400, deals: 2, ownHand: true, hold: 0.35, maxMs: 2500 },
 };
 
 // ---- how good a position is ----------------------------------------------------------------------------------------------------------------
@@ -64,22 +64,24 @@ const HEART_SPENT = 10;                                                         
  */
 const usable = (s, now) => ({ field: !now || (!s.used.field && s.phase !== 'bonus'), chain: !now || s.phase === 'chain' || (!s.used.chain && s.phase !== 'bonus') });
 /** `{ n, by }`: `n` attacks in all, made by `by` different creatures (at most two: the Field action and a Shadow Step). */
+// Since bots/19 (19 Nov 2026 rules): the Field action needs an attacker that can strike (ready, a Maniac, which attacks while spent, or a spent Knight under its
+// owner's Lantern Keeper), but a Shadow Step takes ANY Knight or Maniac, ready or spent (the rule since 18 Nov 2026), and every Shadow Step wound is one more
+// sequence, by the same creature if need be. Before bots/19 a Shadow Step was counted only for a second, ready attacker and only once, so a lone spent Knight
+// with a Shadow Step wound looked harmless, and two wound Shadow Steps counted as one.
 const strikes = (s, P, now = false, own = false) => {
-  const u = usable(s, now), shadow = u.chain && P.chain.some((c) => c.key === 'shadow'), atk = P.field.filter((c) => c.key === 'knight' || c.key === 'maniac');
-  // a spent attacker sheltered by a Lantern Keeper, ready or spent, attacks as if ready (since bots/8; a spent Keeper too since bots/18), and a Maniac attacks while spent (bots/18); a Knight pairs with any other Knight of its owner's, ready or spent (18 Nov 2026)
-  const lantern = P.field.some((l) => l.key === 'lantern'), strikes1 = (up) => (c) => up(c) || c.key === 'maniac' || (lantern && c.spent);
+  const u = usable(s, now), shadows = u.chain ? P.chain.filter((c) => c.key === 'shadow').length : 0, atk = P.field.filter((c) => c.key === 'knight' || c.key === 'maniac');
   const len = (c) => (c.key === 'maniac' || (c.key === 'knight' && P.field.some((x) => x.key === 'knight' && x.id !== c.id)) ? 2 : 1);
-  const seqs = (up) => atk.filter(strikes1(up)).map(len).sort((a, b) => b - a);
-  const total = (x, field) => { const by = Math.min(x.length, (field ? 1 : 0) + (shadow ? 1 : 0)); return { n: x.slice(0, by).reduce((a, b) => a + b, 0), by }; };
-  // `own` (the Warlock, since bots/14): a player may read their own hand, and each Rally in it stands one more spent attacker without an action
-  const rallies = own ? P.hand.filter((c) => c.key === 'rally').length : 0;
-  const ready = (rallies ? [...seqs((c) => !c.spent), ...atk.filter((c) => c.spent && !strikes1(() => false)(c)).map(len).sort((a, b) => b - a).slice(0, rallies)].sort((a, b) => b - a) : seqs((c) => !c.spent));
-  const r = total(ready, u.field);
-  if (now && s.phase === 'bonus') { r.n += 1; r.by += 1; }
+  const best = (xs) => xs.reduce((a, c) => Math.max(a, len(c)), 0);
+  // `own` (the Warlock, since bots/14): a player may read their own hand, and a Rally in it readies a spent attacker without an action
+  const rally = own && P.hand.some((c) => c.key === 'rally');
+  const strikers = atk.filter((c) => canStrike(s, c) || (rally && c.spent));
+  // `free`: the Field action is there for an attack. Next turn (`now` false) a spent attacker may Recover first: with a Heaven's Resolve that is free, so every attacker strikes.
+  const field = (fieldOk, xs) => (fieldOk ? best(xs) : 0);
+  const count = (f) => { const slots = (f ? 1 : 0) + (atk.length ? shadows : 0), n = f + (atk.length ? shadows * best(atk) : 0); return { n, by: Math.min(slots, atk.length) }; };
+  const r = count(field(u.field, strikers));
+  if (now && s.phase === 'bonus') { r.n += 1; r.by = Math.max(r.by, 1); }
   if (now) return r;
-  // Next turn they may Recover first (since bots/4): every attacker stands, and backing is counted with every Knight ready. Recover uses the Field action,
-  // so only a Shadow Step attacks after it, unless a Heaven's Resolve makes Recover free.
-  const q = total(seqs(() => true), hasResolve(s, P.idx));
+  const q = count(field(true, hasResolve(s, P.idx) ? atk : strikers));
   return { n: Math.max(r.n, q.n), by: Math.max(r.by, q.by) };
 };
 
@@ -88,7 +90,7 @@ function material(s, P, O) {
   if (P.hearts[0]?.spent) v -= HEART_SPENT;
   for (const c of P.field) {
     if (c.key === 'portal') v += 4.5;
-    else if (c.key === 'resolve') v += 1.5 + 0.8 * P.field.filter((x) => x.key === 'knight' || x.key === 'maniac').length;       // free Recover: worth more the more attackers it keeps standing (bots/13: it stands only attackers)
+    else if (c.key === 'resolve') v += 1.5 + 0.8 * P.field.filter((x) => x.key === 'knight' || x.key === 'maniac').length + 0.4 * P.field.filter((x) => ['guardian', 'angel', 'lantern'].includes(x.key)).length;       // free Recover: worth more the more creatures it keeps standing (since bots/19 its Recover readies every creature, 19 Nov 2026; bots/13 to 18: attackers only)
     else v += (c.spent ? SPENT_VALUE : READY_VALUE)[c.key] ?? 0;
     if (c.key === 'guardian' && c.guards) v += c.guards === P.hearts[0]?.id ? 1.4 : 0.7;
   }
@@ -104,14 +106,25 @@ function chainOpens(s, att, def, now) {
   if (!usable(s, now).chain) return false;
   const chain = s.players[att].chain, heart = s.players[def].hearts[0];
   let shifts = chain.filter((c) => c.key === 'shift').length, fireballs = chain.filter((c) => c.key === 'fireball').length;
-  if (!shifts && !fireballs) return false;
+  const behinds = chain.filter((c) => c.key === 'behind').length;
+  if (!shifts && !fireballs && !behinds) return false;
+  // Behind You hits every Guardian (a Guardian is never guarded): each copy is one hit on each of them (since bots/19). A Lantern Keeper guards a spent Heart
+  // (19 Nov 2026), so the Keepers must go too: a Shift cannot touch them, a Fireball can while nothing guards them (since bots/19; before, the bot thought
+  // taking the Guardians off a spent Heart under a Keeper opened it).
+  const cost = (c) => Math.max(0, (c.spent ? 1 : 2) - (isGuardian(c) || c.key === 'lantern' ? behinds : 0));
   const guards = s.players[def].field.filter((c) => c.key === 'guardian' && c.guards === heart.id).sort((a, b) => !!a.spent - !!b.spent);       // ready ones first
   for (const g of guards) {
+    if (!cost(g)) continue;
     if (shifts) { shifts--; continue; }
-    fireballs -= g.spent ? 1 : 2;
+    fireballs -= cost(g);
+  }
+  if (heart.spent) for (const k of s.players[def].field.filter((c) => c.key === 'lantern')) {
+    if (guardiansOf(s, k).length) return false;                              // a guarded Keeper: too far for one Chain to reckon with
+    fireballs -= cost(k);
   }
   return fireballs >= 0;
 }
+const isGuardian = (c) => c.key === 'guardian';
 /**
  * How close `att` is to winning against `def` with the attacks it has: this turn's (`now`) or a fresh turn's. Only a blow on a spent Heart wins; on a ready
  * Heart it is a first blow, worth far less (the spent Heart itself is counted in `material`), unless the attacker has a second blow to follow it with.
@@ -137,15 +150,21 @@ function pressure(s, att, def, now = false, own = false) {
  * of them from a wound Behind You. The most valuable ones are counted, one per attack or Fireball, at what defeating it would cost (its spent value). Before, the bot only watched its Heart, so it had no reason to shelter its creatures or to deploy a Lantern.
  */
 const EXPOSED = 0.6;
+// Devices count too (since bots/19): they are always spent, so one hit defeats them, and since 19 Nov 2026 a Lantern Keeper guards them. A Warp Portal can be
+// hit only by spells; Behind You never touches a device. Before bots/19 an open device looked safe, so the bot never covered one with a Keeper or a Guardian.
+const DEVICE_VALUE = { portal: 4.5, resolve: 2.5 };
+const worthOf = (c) => SPENT_VALUE[c.key] ?? DEVICE_VALUE[c.key];
 function exposure(s, att, def) {
-  const A = s.players[att], spent = s.players[def].field.filter((c) => c.spent && READY_VALUE[c.key] !== undefined && !isGuarded(s, c));
-  const guardedSpent = hasPortal(s, att) ? s.players[def].field.filter((c) => c.spent && READY_VALUE[c.key] !== undefined && isGuarded(s, c)) : [];
+  const A = s.players[att], atRisk = (c) => c.spent && worthOf(c) !== undefined;
+  const spent = s.players[def].field.filter((c) => atRisk(c) && !isGuarded(s, c));
+  const guardedSpent = hasPortal(s, att) ? s.players[def].field.filter((c) => atRisk(c) && isGuarded(s, c) && c.key !== 'portal') : [];
   if (!spent.length && !guardedSpent.length) return 0;
-  const worth = (c) => SPENT_VALUE[c.key], sum = (xs) => xs.reduce((a, c) => a + worth(c), 0);
-  const fireballs = A.chain.filter((c) => c.key === 'fireball').length, attacks = strikes(s, A).n;
-  if (A.chain.some((c) => c.key === 'behind')) return EXPOSED * (sum(spent) + sum([...guardedSpent].sort((a, b) => worth(b) - worth(a)).slice(0, attacks)));
-  const byAttack = [...spent, ...guardedSpent].sort((a, b) => worth(b) - worth(a)).slice(0, attacks), rest = spent.filter((c) => !byAttack.includes(c)).sort((a, b) => worth(b) - worth(a)).slice(0, fireballs);
-  return EXPOSED * (sum(byAttack) + sum(rest));
+  const sum = (xs) => xs.reduce((a, c) => a + worthOf(c), 0), byWorth = (xs) => [...xs].sort((a, b) => worthOf(b) - worthOf(a));
+  const fireballs = A.chain.filter((c) => c.key === 'fireball').length, attacks = strikes(s, A).n, hittable = (c) => c.key !== 'portal';      // creatures never attack a Warp Portal
+  const behind = A.chain.some((c) => c.key === 'behind'), swept = behind ? spent.filter((c) => READY_VALUE[c.key] !== undefined) : [];
+  const byAttack = byWorth([...spent, ...guardedSpent].filter((c) => hittable(c) && !swept.includes(c))).slice(0, attacks);
+  const rest = byWorth(spent.filter((c) => !byAttack.includes(c) && !swept.includes(c))).slice(0, fireballs);
+  return EXPOSED * (sum(swept) + sum(byAttack) + sum(rest));
 }
 /** Score of a position for `me` (higher is better). Reads only what a player can see. `caution` scales how much the other player's threat counts. */
 export function evaluate(s, me, caution = 1, own = false) {
@@ -282,7 +301,7 @@ function heap() {
  * A turn that wins is `v >= 1e5`, and among them the shortest is first.
  */
 const FINISH_OPEN = 16;
-export function searchTurn(s, seat, { budget = 2000, keep = 6, own = false } = {}) {
+export function searchTurn(s, seat, { budget = 2000, keep = 6, own = false, deadline = Infinity } = {}) {
   const ev = (g) => evaluate(g, seat, 1, own);
   const done = new Map(), seen = new Set([posKey(s)]), open = heap();
   const finish = (g, line) => {                                         // a finished turn: keep the best one per resulting position
@@ -292,7 +311,7 @@ export function searchTurn(s, seat, { budget = 2000, keep = 6, own = false } = {
   };
   open.push({ pri: ev(s), g: s, line: [] });
   let opened = 0;
-  while (open.size && opened < budget) {
+  while (open.size && opened < budget && (opened % 16 || Date.now() < deadline)) {      // `deadline`: a hard stop in wall time (since bots/19), checked every 16 positions
     const { g, line } = open.pop();
     opened++;
     for (const m of sensible(g)) {
@@ -307,7 +326,7 @@ export function searchTurn(s, seat, { budget = 2000, keep = 6, own = false } = {
   const complete = !open.size;
   // the most promising positions the budget left unopened still finish (FINISH_OPEN of them; finishing them all could take seconds): each is played to
   // its end the way the Knight would see it, one move at a time
-  for (let i = 0; open.size && i < FINISH_OPEN; i++) { const { g, line } = open.pop(); finishGreedy(g, seat, line, finish); }
+  for (let i = 0; open.size && i < (Date.now() < deadline ? FINISH_OPEN : 2); i++) { const { g, line } = open.pop(); finishGreedy(g, seat, line, finish); }
   const out = [...done.values()].sort((a, b) => b.v - a.v).slice(0, keep);
   out.opened = opened; out.complete = complete;
   return out;
@@ -328,7 +347,7 @@ function finishGreedy(g, seat, line, finish) {
  * (by their own judgement); the result is `me`'s score after it, averaged. This is the Warlock's look at the answer (since bots/14); it replaces `danger`,
  * whose one-move-ahead answer missed kills that need a Release and then an attack.
  */
-function answer(g, me, seed, { budget, deals, own }) {
+function answer(g, me, seed, { budget, deals, own, deadline = Infinity }) {
   if (g.phase === 'over') return evaluate(g, me);
   const foe = 1 - me, pool = unseenPool(g, me);
   let total = 0;
@@ -340,7 +359,7 @@ function answer(g, me, seed, { budget, deals, own }) {
     f.deck = fake.slice(size, size + f.deck.length);                     // the same number of cards (an empty pile changes what they may deploy), never which
     const mine = x.players[me].deck;                                       // its own pile: the cards are known (deck list less what it has seen), their order is not
     for (let i = mine.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [mine[i], mine[j]] = [mine[j], mine[i]]; }
-    const [best] = searchTurn(x, foe, { budget, keep: 1 });
+    const [best] = searchTurn(x, foe, { budget, keep: 1, deadline });
     total += evaluate(best.g, me, 1, own);
   }
   return total / deals;
@@ -353,13 +372,21 @@ function answer(g, me, seed, { budget, deals, own }) {
 function planMove(game, seat, profile, rng, trace, memo) {
   const planned = memo?.plan?.get(posKey(game));
   if (planned) return finishTrace(trace, 'plan', [[planned.id, 0]]) ?? planned;
-  const own = !!profile.ownHand, turns = searchTurn(game, seat, { budget: profile.plan, keep: profile.reply, own });
+  // Hard time blocks (since bots/19): the turn search may use half of `maxMs`, the answers the rest. Turns the clock leaves unanswered drop out (the best
+  // one by its own score is always answered first), so a slow machine plays a shallower Warlock, never a frozen page.
+  const t0 = Date.now(), maxMs = profile.maxMs ?? Infinity;
+  const own = !!profile.ownHand, turns = searchTurn(game, seat, { budget: profile.plan, keep: profile.reply, own, deadline: t0 + maxMs / 2 });
   const deal = Math.floor(rng() * 2 ** 30);
   let pick;
   if (turns[0].v >= 1e5) pick = turns[0];                                 // a turn that wins: the shortest
   else {
-    for (const t of turns) t.score = answer(t.g, seat, deal, { budget: profile.replyBudget, deals: profile.deals ?? DEALS, own }) + 0.1 * t.v + (rng() - 0.5) * 2 * profile.noise;
-    pick = turns.reduce((a, b) => (b.score > a.score ? b : a));
+    const answered = [];
+    for (const t of turns) {
+      if (answered.length && Date.now() > t0 + maxMs) break;
+      t.score = answer(t.g, seat, deal, { budget: profile.replyBudget, deals: profile.deals ?? DEALS, own, deadline: t0 + maxMs }) + 0.1 * t.v + (rng() - 0.5) * 2 * profile.noise;
+      answered.push(t);
+    }
+    pick = answered.reduce((a, b) => (b.score > a.score ? b : a));
   }
   if (memo) {                                                             // remember the rest of the turn, keyed by the position each move is played from
     memo.plan = new Map();
@@ -372,14 +399,13 @@ function planMove(game, seat, profile, rng, trace, memo) {
 const finishTrace = (trace, kind, top) => { if (trace) { trace.kind = kind; trace.top = top; } return null; };
 
 /**
- * The moves a bot considers. Some legal moves are ones no player makes, and a bot never chooses them (they only fed loops and wasted cards):
- * a Witch's Kiss that takes a Shift out of a Chain (since bots/11:
- * the Shift goes back and forth, a card was wound three times in a game in one game in five), and a Fireball at the player's own card (skipping it costs nothing).
+ * The moves a bot considers. Some legal moves are ones no player makes, and a bot never chooses them: a Fireball at the player's own card (skipping it costs nothing).
+ * (bots/11 to 18 also never Kissed a Shift out of a Chain, because a Shift went back and forth between the Chains; since 19 Nov 2026 a Kiss takes only from the
+ * enemy's Chain and never another Kiss, so each Kiss can do it once, and taking the Shift that threatens your Guardian is a real defence: allowed again in bots/19.)
  */
 let holding = false;                                                      // set by a bot (see `makeBot`) for a turn in which it keeps its Witch's Kiss in hand
 const sensible = (game) => legalMoves(game).filter((m) => {
   if (holding && m.type === 'cast' && m.spell === 'kiss') return false;
-  if (m.type === 'cast' && m.spell === 'kiss') { const at = locate(game, m.targetId); if (at?.zone === 'chain' && at.card.key === 'shift') return false; }        // a Kiss taking a Kiss is no longer legal (19 Nov 2026)
   if (m.type === 'fireball' && locate(game, m.targetId)?.p.idx === game.turn) return false;
   return true;
 });
@@ -415,7 +441,7 @@ export function chooseMove(game, seat, profile = PROFILES.knight, rng = Math.ran
   cands.forEach((x, i) => { const r = profile.depth > 1 && i < profile.beam + 2 ? reach(x.g, seat, profile.depth - 1, profile.beam) : { v: x.v, g: x.g }; x.score = r.v + 0.25 * x.v; x.line = r.g; });
   for (const x of scored) x.score += (rng() - 0.5) * 2 * profile.noise;
   if (profile.slip && rng() < profile.slip) {                            // a believable mistake: one of the next few moves it likes, never one far worse
-    const ranked = [...scored].sort((a, b) => b.score - a.score), near = ranked.slice(1, 4).filter((x) => x.m.type !== 'end' && x.score > ranked[0].score - SLIP_RANGE);       // a lesser action, never passing
+    const ranked = [...scored].sort((a, b) => b.score - a.score), near = ranked.slice(1, 4).filter((x) => x.m.type !== 'end' && x.score > ranked[0].score - (profile.slipRange ?? SLIP_RANGE));       // a lesser action, never passing
     if (near.length) return done(near[Math.floor(rng() * near.length)].m, 'slip', ranked);
   }
   if (profile.reply) {                                                   // the few best lines, each played to the end of the turn, less what the answer would do to the Heart
