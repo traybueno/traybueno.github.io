@@ -1,5 +1,5 @@
 /** Game state plumbing: the seeded shuffle, the decks, the draw and the hidden-information view. Knows nothing about what a card does. */
-import { DECK } from './cards.js?v=80ff107';
+import { DECK } from './cards.js?v=8059ec6';
 
 function rnd(state) {                       // mulberry32; the generator state lives in the game so it snapshots
   state.rng = (state.rng + 0x6D2B79F5) >>> 0;

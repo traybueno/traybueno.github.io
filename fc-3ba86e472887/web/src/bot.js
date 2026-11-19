@@ -8,10 +8,10 @@
  * looks a few moves further along its own turn (a deploy, an instant and an attack are one turn) before picking. The profiles differ in how far they
  * look, how much noise there is in their judgement, how much a threat counts, how often they settle for a lesser move, and whether they weigh the answer.
  */
-import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=80ff107';
+import { legalMoves, apply, isGuarded, hasPortal, hasResolve, locate } from '../../src/index.js?v=8059ec6';
 
-/** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. bots/17 (19 Nov 2026): one free Guardian move a turn; it is judged where it leaves the Guardian when the turn ends (see `chooseMove`). bots/16 had a loop guard for unlimited moves, no longer needed. */
-export const BOT_VERSION = 'bots/17';
+/** Bumped whenever a profile or `evaluate` changes, so saved game logs say which bots played them. bots/18 (19 Nov 2026, spent audit): a spent Angel still saves and a spent Keeper still lights, so both keep most of their value; a spent Maniac counts as an attacker. bots/17 (19 Nov 2026): one free Guardian move a turn; it is judged where it leaves the Guardian when the turn ends (see `chooseMove`). bots/16 had a loop guard for unlimited moves, no longer needed. */
+export const BOT_VERSION = 'bots/18';
 
 /**
  * Squire is a beginner: it looks one move ahead, half-sees threats (`caution`) and now and then settles for a lesser move (`slip`), never a wild one.
@@ -27,9 +27,10 @@ export const PROFILES = {
 };
 
 // ---- how good a position is ----------------------------------------------------------------------------------------------------------------
-const READY_VALUE = { knight: 4, maniac: 6, angel: 3.2, guardian: 1.8, lantern: 2.6 }, SPENT_VALUE = { knight: 2.6, maniac: 4, angel: 0.8, guardian: 1.1, lantern: 0.8 };
+const READY_VALUE = { knight: 4, maniac: 6, angel: 3.2, guardian: 1.8, lantern: 2.6 }, SPENT_VALUE = { knight: 2.6, maniac: 4, angel: 2, guardian: 1.1, lantern: 1.6 };
 // Since bots/13 (18 Nov 2026: Recover stands only attackers) a spent Guardian, Angel or Lantern Keeper stays spent until a Rally, so it is worth much less than
-// its ready value: a spent Angel saves nothing and a spent Keeper shelters nobody; a spent Guardian still guards, so it keeps more. Knights and Maniacs
+// its ready value. Since bots/18 (spent audit) a spent Angel still saves and a spent Keeper still lights, like a spent Guardian still guards, so each keeps most of it
+// (bots/13 to 17: Angel 0.8, Keeper 0.8, when spent switched them off). Knights and Maniacs
 // still stand with one Recover, and keep the bots/9 values below.
 // A spent creature stands again with one Recover (one Field action stands them all), so it is worth well over half its ready value (since bots/9;
 // before, a Knight was 1.3 and a Maniac 2). Too low, and defeating a spent creature, which is permanent, looked worth less than spending a ready
@@ -65,8 +66,8 @@ const usable = (s, now) => ({ field: !now || (!s.used.field && s.phase !== 'bonu
 /** `{ n, by }`: `n` attacks in all, made by `by` different creatures (at most two: the Field action and a Shadow Step). */
 const strikes = (s, P, now = false, own = false) => {
   const u = usable(s, now), shadow = u.chain && P.chain.some((c) => c.key === 'shadow'), atk = P.field.filter((c) => c.key === 'knight' || c.key === 'maniac');
-  // a spent attacker sheltered by a ready Lantern Keeper attacks as if ready (since bots/8); a Knight pairs with any other Knight of its owner's, ready or spent (18 Nov 2026)
-  const lantern = P.field.some((l) => l.key === 'lantern' && !l.spent), strikes1 = (up) => (c) => up(c) || (lantern && c.spent);
+  // a spent attacker sheltered by a Lantern Keeper, ready or spent, attacks as if ready (since bots/8; a spent Keeper too since bots/18), and a Maniac attacks while spent (bots/18); a Knight pairs with any other Knight of its owner's, ready or spent (18 Nov 2026)
+  const lantern = P.field.some((l) => l.key === 'lantern'), strikes1 = (up) => (c) => up(c) || c.key === 'maniac' || (lantern && c.spent);
   const len = (c) => (c.key === 'maniac' || (c.key === 'knight' && P.field.some((x) => x.key === 'knight' && x.id !== c.id)) ? 2 : 1);
   const seqs = (up) => atk.filter(strikes1(up)).map(len).sort((a, b) => b - a);
   const total = (x, field) => { const by = Math.min(x.length, (field ? 1 : 0) + (shadow ? 1 : 0)); return { n: x.slice(0, by).reduce((a, b) => a + b, 0), by }; };
@@ -122,7 +123,7 @@ function pressure(s, att, def, now = false, own = false) {
   if (!open) return 0;
   // It takes two creatures to defeat a Heart (since bots/5): the creature whose attack lands on a ready Heart is defeated, so it has no second attack, and
   // a ready Heart falls only to two attackers. One creature's double on it is a first blow that costs that creature (counted in `material`), not a win.
-  // Each ready Angel takes one attack and the attacker survives it (since bots/6 the Angels are counted, not just seen): `left` attacks reach the Heart,
+  // Each Angel (ready or spent, since bots/18) takes one attack and the attacker survives it (since bots/6 the Angels are counted, not just seen): `left` attacks reach the Heart,
   // and each creature lands at most one of them. With a single Angel this gives the same numbers as bots/5; with more, every Angel taken is progress,
   // and a threat into a wall of Angels counts for little, so the bot no longer spends its turns keeping the other side's Knights spent.
   const a = angels(s, def), left = n - a;
@@ -232,7 +233,7 @@ function danger(s, me, seed = null) {
   }
   return total / tries;
 }
-const angels = (s, me) => s.players[me].field.filter((c) => c.key === 'angel' && !c.spent).length;
+const angels = (s, me) => s.players[me].field.filter((c) => c.key === 'angel').length;      // a spent Angel saves too (bots/18)
 /**
  * For the scanner (web/sim/luck.js): `s` is the position just after `me`'s turn ended. Does the other player defeat `me`'s Heart next turn with only what
  * `me` can see of them (field and Chain, hand and pile treated as empty)? Every line of up to `depth` Releases, attacks and Recovers is tried (a released

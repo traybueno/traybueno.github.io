@@ -1,9 +1,9 @@
 /** Field + Chain, Restricted: the whole public surface of the engine. */
-import { DECK } from './cards.js?v=80ff107';
-import { blankGame, viewFor } from './state.js?v=80ff107';
-import { initialize, legalMoves, apply, moveError, locate, isGuarded, guardiansOf, attackTargets, canAttack, inPlay, isCreature, kindOf, hasPortal, hasResolve, isBacked, canStrike, protector, inForce, affects, outOfCards, INSTANTS } from './rules.js?v=80ff107';
+import { DECK } from './cards.js?v=8059ec6';
+import { blankGame, viewFor } from './state.js?v=8059ec6';
+import { initialize, legalMoves, apply, moveError, locate, isGuarded, guardiansOf, attackTargets, canAttack, inPlay, isCreature, kindOf, hasPortal, hasResolve, isBacked, canStrike, protector, inForce, affects, outOfCards, INSTANTS } from './rules.js?v=8059ec6';
 
-export { CARDS, DECK, CHAIN_MAX, HAND_SIZE, REFERENCE } from './cards.js?v=80ff107';
+export { CARDS, DECK, CHAIN_MAX, HAND_SIZE, REFERENCE } from './cards.js?v=8059ec6';
 export { viewFor, legalMoves, apply, moveError, locate, isGuarded, guardiansOf, attackTargets, canAttack, inPlay, isCreature, kindOf, hasPortal, hasResolve, isBacked, canStrike, protector, inForce, affects, outOfCards, INSTANTS };
 
 /** A new game from a seed (the same seed always deals the same game). `options.deck` overrides the deck list, `{ key: count }`. Seat 0 plays first. */

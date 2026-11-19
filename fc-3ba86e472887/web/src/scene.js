@@ -3,14 +3,14 @@
  * moves the cards by springs and draws the corner marks. The scene also answers where the pointer is: which cards are under it, and what point of the table.
  */
 import * as THREE from 'three';
-import { Card, SPRING } from './card.js?v=80ff107';
-import { Table } from './table.js?v=80ff107';
-import { Overlay } from './overlay.js?v=80ff107';
-import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=80ff107';
-import { phone, phoneArea } from './phone.js?v=80ff107';
-import { Fx } from './fx.js?v=80ff107';
-import { protector, inForce, affects } from '../../src/index.js?v=80ff107';
-import { portalPulse } from './overlay.js?v=80ff107';
+import { Card, SPRING } from './card.js?v=8059ec6';
+import { Table } from './table.js?v=8059ec6';
+import { Overlay } from './overlay.js?v=8059ec6';
+import { layout, rowIndexAt, VIEW as VIEW_DESK, PHONE_VIEW, TABLE, setPhoneHand } from './layout.js?v=8059ec6';
+import { phone, phoneArea } from './phone.js?v=8059ec6';
+import { Fx } from './fx.js?v=8059ec6';
+import { protector, inForce, affects } from '../../src/index.js?v=8059ec6';
+import { portalPulse } from './overlay.js?v=8059ec6';
 
 const CAMERA_TILT = 23;                                     // degrees off straight-down
 
@@ -102,7 +102,7 @@ export class Scene {
     this.fx.flush();                                        // whatever the last move was still doing is finished off at once
     const spawn = events && !snap ? this.fx.plan(events, this.poses, next, view, viewer) : new Map();
     this.layout = L; this.poses = next;
-    // A ring marks a standing effect that is in force: the Heart an Angel would save, and every Warp Portal, Heaven's Resolve and ready Lantern Keeper.
+    // A ring marks a standing effect that is in force: the Heart an Angel would save, and every Warp Portal, Heaven's Resolve and Lantern Keeper (ready or spent, since 19 Nov 2026).
     // Each standing effect in force idles, in its card's colour, with the cards it acts on (engine `affects`); an Angel's shows on the Heart it would save.
     const want = new Map(view.players.flatMap((P) => P.field.filter((c) => inForce(view, c)).map((c) => [c.id, { key: c.key, ids: affects(view, c) }])).filter(([, d]) => d.key !== 'angel' || d.ids.length));
     for (const [id, d] of this.idle) if (!want.has(id)) d.gone = true;

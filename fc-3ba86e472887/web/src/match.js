@@ -13,8 +13,8 @@
  * `=s` the target turned spent, `=x` it was defeated, `=r` an Angel took the blow, `=W` the attack won. The last line is `end win=p1 turns=12` and the final position.
  * Only counts are logged for hands and piles: the log never says which cards are in a hand.
  */
-import { newGame, legalMoves, apply, locate, viewFor, CARDS, DECK } from '../../src/index.js?v=80ff107';
-import { makeBot, PROFILES, TURN_LIMIT, BOT_VERSION } from './bot.js?v=80ff107';
+import { newGame, legalMoves, apply, locate, viewFor, CARDS, DECK } from '../../src/index.js?v=8059ec6';
+import { makeBot, PROFILES, TURN_LIMIT, BOT_VERSION } from './bot.js?v=8059ec6';
 
 const CODE = { knight: 'K', maniac: 'M', guardian: 'G', angel: 'A', lantern: 'L', portal: 'P', resolve: 'H', fireball: 'F', shift: 'S', behind: 'B', shadow: 'D', rally: 'R', kiss: 'W' };
 export const LEGEND = '# fcr1 K Knight, M Maniac, G Guardian, A Angel, L Lantern Keeper, P Portal, H Heaven\'s Resolve, F Fireball, S Shift, B Behind You, D Shadow Step, R Rally, W Witch\'s Kiss; lower case = spent; G>h guards the Heart, G>n the nth card of that field';

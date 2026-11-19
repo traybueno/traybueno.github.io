@@ -8,9 +8,9 @@
  * ({ x, y, z, yaw, spin, scale, face, dim }); a card that is `held` at a pose goes there, and is handed back to its place when the hold is released.
  */
 import * as THREE from 'three';
-import { CARDS } from '../../src/index.js?v=80ff107';
-import { SPRING } from './card.js?v=80ff107';
-import { handSpot, deckSpot } from './layout.js?v=80ff107';
+import { CARDS } from '../../src/index.js?v=8059ec6';
+import { SPRING } from './card.js?v=8059ec6';
+import { handSpot, deckSpot } from './layout.js?v=8059ec6';
 
 const mix = (a, b, u) => { const o = { ...b }; for (const k of ['x', 'y', 'z', 'spin', 'scale', 'face']) o[k] = (a[k] ?? 0) + ((b[k] ?? 0) - (a[k] ?? 0)) * u; return o; };
 const moved = (a, b) => ['x', 'y', 'z', 'spin', 'face'].some((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) > 0.05) || !!a.dim !== !!b.dim;

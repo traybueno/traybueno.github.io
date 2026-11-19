@@ -13,8 +13,8 @@
  * enter spent and never ready, so any hit defeats them). Nothing else is stored on a card.
  * The end of the piles, per player: the draw that empties a player's own pile discards that player's Guardians, and while their pile is empty they can bring no Guardian into play.
  */
-import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=80ff107';
-import { drawCards } from './state.js?v=80ff107';
+import { CARDS, CHAIN_MAX, HAND_SIZE } from './cards.js?v=8059ec6';
+import { drawCards } from './state.js?v=8059ec6';
 
 /** The cards a Guardian may guard. */
 const GUARDABLE = ['heart', 'knight', 'maniac', 'angel', 'lantern', 'portal', 'resolve'];
@@ -37,16 +37,16 @@ export function locate(s, id) {
 export const inPlay = (s, seat) => [...s.players[seat].hearts, ...s.players[seat].field];
 const everything = (s) => [...inPlay(s, 0), ...inPlay(s, 1)];
 export const guardiansOf = (s, c) => s.players[c.owner].field.filter((g) => g.key === 'guardian' && g.guards === c.id);
-/** Does a ready Lantern Keeper of the card's owner light it? It lights every other spent card of that player's (19 Nov 2026; until then spent creatures only): spent creatures, every device (devices are always spent, so from the moment one enters play), and a Heart that has taken its first blow. Never the Keeper itself (it is not spent while it is ready), never a Guardian (Guardians are never guarded; until 18 Nov 2026 a spent Guardian was reported lit in `light` events though it was not guarded). */
-const lit = (s, c) => c.key !== 'guardian' && !!c.spent && s.players[c.owner].field.some((k) => k.key === 'lantern' && !k.spent && k.id !== c.id);
-/** A card is guarded while any Guardian guards it, or, if it is spent (a creature, a device or a Heart after its first blow), while its owner has a ready Lantern Keeper. A Guardian is never guarded. */
+/** Does a Lantern Keeper of the card's owner light it? A Keeper lights whether it is ready or spent (since 19 Nov 2026, spent audit: a standing effect works either way). It lights every other spent card of that player's (19 Nov 2026; until then spent creatures only): spent creatures, every device (devices are always spent, so from the moment one enters play), and a Heart that has taken its first blow. Never a Lantern Keeper, itself or another (since 19 Nov 2026; until then a ready Keeper lit a spent one), never a Guardian (Guardians are never guarded; until 18 Nov 2026 a spent Guardian was reported lit in `light` events though it was not guarded). */
+const lit = (s, c) => c.key !== 'guardian' && c.key !== 'lantern' && !!c.spent && s.players[c.owner].field.some((k) => k.key === 'lantern');      // never a Keeper (19 Nov 2026: two spent Keepers lighting each other could never be hit)
+/** A card is guarded while any Guardian guards it (ready or spent), or, if it is spent (a creature, a device or a Heart after its first blow), while its owner has a Lantern Keeper (ready or spent). A Guardian is never guarded. */
 export const isGuarded = (s, c) => c.key !== 'guardian' && (guardiansOf(s, c).length > 0 || lit(s, c));
 /** Is this player's draw pile empty? Then they have no Guardian in play and can bring none into play (see `startTurn`). A pure query: a pile's size is public. */
 export const outOfCards = (s, seat) => s.players[seat].deck.length === 0;
 export const hasPortal = (s, seat) => s.players[seat].field.some((c) => c.key === 'portal');
 export const hasResolve = (s, seat) => s.players[seat].field.some((c) => c.key === 'resolve');
-/** Can `c` attack now? A ready attacker can; so can a spent one while a ready Lantern Keeper of its owner shelters it (it attacks as if ready, and stays spent). */
-export const canStrike = (s, c) => canAttack(c) && (ready(c) || lit(s, c));
+/** Can `c` attack now? A ready attacker can. A Maniac can while spent too ("Attacks twice, even while spent", 19 Nov 2026), and so can a spent Knight while a Lantern Keeper of its owner shelters it (it attacks as if ready, and stays spent). */
+export const canStrike = (s, c) => canAttack(c) && (ready(c) || c.key === 'maniac' || lit(s, c));
 /** Knight pair: does this Knight's owner have another Knight in play (ready or spent)? Enemy Knights and Maniacs don't count, and the other Knight takes no action. */
 export const isBacked = (s, c) => c.key === 'knight' && s.players[c.owner].field.some((k) => k.key === 'knight' && k.id !== c.id);
 /** Does this creature attack a second time after its first attack? A Maniac always; a Knight while its owner has another Knight. Never a third. */
@@ -58,16 +58,16 @@ export const canAttack = (c) => CARDS[c.key].attacks === true;
 /** What a creature of `seat` can attack: any unguarded enemy card, or every enemy card with a Warp Portal; never a Warp Portal. */
 export const attackTargets = (s, seat) => inPlay(s, 1 - seat).filter((t) => (!isGuarded(s, t) || hasPortal(s, seat)) && t.key !== 'portal');
 const throughPortal = (s, seat, t) => t.owner !== seat && isGuarded(s, t) && hasPortal(s, seat);
-/** The ready Angel that would take an attack on `seat`'s Heart, or undefined. A spent Angel does not protect. */
-/** Is this card's standing effect in force right now? A Warp Portal and a Heaven's Resolve always are; a Lantern Keeper and an Angel are while ready. Any other card has none. (A pure query for a front end to mark them.) */
-export const inForce = (s, c) => c.key === 'portal' || c.key === 'resolve' || ((c.key === 'lantern' || c.key === 'angel') && !c.spent);
-export const protector = (s, seat) => s.players[seat].field.find((c) => c.key === 'angel' && !c.spent);
-/** The cards this card's standing effect is acting on right now, as ids (empty when it is not in force or touches nothing): a Warp Portal the enemy Guardians it lets attacks pass; a Heaven's Resolve all its owner's creatures (the ones its free Recover stands, 19 Nov 2026; until then its owner's attackers); a ready Lantern Keeper the spent cards it lights (creatures, devices, a spent Heart); the protecting Angel its owner's Heart. A pure query for a front end to tie a card to what it affects. */
+/** The Angel that would take an attack on `seat`'s Heart, or undefined. A spent Angel protects too (since 19 Nov 2026, spent audit; until then only a ready one did). */
+/** Is this card's standing effect in force right now? A Warp Portal and a Heaven's Resolve always are; so are a Lantern Keeper and an Angel, ready or spent (since 19 Nov 2026; until then only while ready). Any other card has none. (A pure query for a front end to mark them.) */
+export const inForce = (s, c) => ['portal', 'resolve', 'lantern', 'angel'].includes(c.key);
+export const protector = (s, seat) => s.players[seat].field.find((c) => c.key === 'angel');
+/** The cards this card's standing effect is acting on right now, as ids (empty when it is not in force or touches nothing): a Warp Portal the enemy Guardians it lets attacks pass; a Heaven's Resolve all its owner's creatures (the ones its free Recover stands, 19 Nov 2026; until then its owner's attackers); a Lantern Keeper the spent cards it lights (creatures, devices, a spent Heart); the protecting Angel its owner's Heart. A pure query for a front end to tie a card to what it affects. */
 export const affects = (s, c) => {
   const own = s.players[c.owner], foe = s.players[1 - c.owner];
   if (c.key === 'portal') return foe.field.filter((g) => g.key === 'guardian').map((g) => g.id);
   if (c.key === 'resolve') return own.field.filter(isCreature).map((g) => g.id);
-  if (c.key === 'lantern') return c.spent ? [] : inPlay(s, c.owner).filter((g) => g.id !== c.id && lit(s, g)).map((g) => g.id);      // spent creatures, devices and a spent Heart
+  if (c.key === 'lantern') return inPlay(s, c.owner).filter((g) => g.id !== c.id && lit(s, g)).map((g) => g.id);      // spent creatures, devices and a spent Heart
   if (c.key === 'angel') return protector(s, c.owner)?.id === c.id && own.hearts[0] ? [own.hearts[0].id] : [];
   return [];
 };
@@ -206,7 +206,7 @@ function hit(s, t) {
   remove(s, t); discard(s, t);
 }
 /**
- * An attack reaches a Heart. A ready Angel of its owner is defeated instead (automatic, no choice) and the Heart is untouched, whatever state it is in;
+ * An attack reaches a Heart. An Angel of its owner (ready or spent) is defeated instead (automatic, no choice) and the Heart is untouched, whatever state it is in;
  * the attacker survives. Otherwise the attack lands: a ready Heart turns spent (it never readies again) and the attacker `k` is defeated, so it has no
  * second attack and it takes two creatures to defeat a Heart; a spent Heart is defeated: the attacker wins.
  */
@@ -223,7 +223,7 @@ function strikeHeart(s, t, k) {
  * made by Shadow Step: it does not use the Field action. The second attack itself (`second`) never leads to a third.
  */
 function attack(s, p, k, t, { second = false, free = false } = {}) {
-  const back = second ? s.bonus.back : s.phase === 'chain' ? 'chain' : 'play', via = throughPortal(s, p.idx, t), sheltered = !!k.spent && lit(s, k);
+  const back = second ? s.bonus.back : s.phase === 'chain' ? 'chain' : 'play', via = throughPortal(s, p.idx, t), sheltered = !!k.spent && k.key !== 'maniac' && lit(s, k);
   if (!free) s.used.field = true;
   k.spent = true;                                         // an attack is a hit, and the attacker turns spent
   ev(s, sheltered ? { t: 'attack', id: k.id, hit: t.id, portal: via, lit: true } : { t: 'attack', id: k.id, hit: t.id, portal: via });     // `lit`: a spent attacker that a Lantern Keeper lets attack
@@ -288,16 +288,16 @@ function resolve(s, p, kind, legal, by) {
   }
 }
 /**
- * A Lantern Keeper's light comes on or goes out over cards that were already spent (creatures, devices, a spent Heart): it was deployed or readied, or it was spent, hit or taken away.
+ * A Lantern Keeper's light comes on or goes out over cards that were already spent (creatures, devices, a spent Heart): it came into play, or it left play (a spent Keeper still lights, since 19 Nov 2026).
  * One `light` event per player whose light changed, after the move's own events: `on`, the cards (`ids`), and the Keeper (`by`). For the front end only. A card that turns
- * spent, or a device that enters play, beside a ready Keeper is lit at once but gets no `light` event: it was not spent before the move (`affects` lists it).
+ * spent, or a device that enters play, beside a Keeper is lit at once but gets no `light` event: it was not spent before the move (`affects` lists it).
  */
 function light(before, s) {
   const litIn = (g) => new Set(everything(g).filter((c) => lit(g, c)).map((c) => c.id));
   const onTable = (at) => at?.zone === 'field' || at?.zone === 'hearts';            // a spent Heart is lit too (19 Nov 2026)
   const was = litIn(before), now = litIn(s), spentThen = (id) => { const at = locate(before, id); return onTable(at) && !!at.card.spent; };
   const spentNow = (id) => { const at = locate(s, id); return onTable(at) && !!at.card.spent; };
-  const keeper = (g, seat) => g.players[seat].field.find((k) => k.key === 'lantern' && !k.spent)?.id;
+  const keeper = (g, seat) => g.players[seat].field.find((k) => k.key === 'lantern')?.id;
   for (const seat of [0, 1]) {
     const mine = (id) => locate(s, id)?.card.owner === seat;
     const on = [...now].filter((id) => !was.has(id) && spentThen(id) && mine(id)), off = [...was].filter((id) => !now.has(id) && spentNow(id) && mine(id));

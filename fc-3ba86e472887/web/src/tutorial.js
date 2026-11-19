@@ -15,7 +15,7 @@
  * A board names cards per seat: `field`, `hand`, `chain`, `discard`, `draws` (in the order they will be drawn), `spentHeart`. A field entry is `key`,
  * `key:spent`, `key>heart` (a Guardian on its Heart) or `key>N` (a Guardian on the Nth card of that field, from 1), and `:spent` may follow either.
  */
-import { newGame, legalMoves, locate } from '../../src/index.js?v=80ff107';
+import { newGame, legalMoves, locate } from '../../src/index.js?v=8059ec6';
 
 /** Card ids keep the engine's form `<seat>-<key>-<n>` (match.js `keyOf` reads the key from it). */
 let made = 0;
@@ -114,7 +114,7 @@ export const STORY = {
     wait(),
 
     chapter('The Chain'),
-    tell('The opponent called an Angel. While an Angel is ready, it takes any attack on its Heart instead.'),
+    tell('The opponent called an Angel. While an Angel is in play, ready or spent, it takes any attack on its Heart instead.'),
     step('Drag Shift into your Chain.', is('wind')),
     end(),
     wait(),

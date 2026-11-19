@@ -4,7 +4,7 @@
  * never look like geometry. They fade in over a moment while settling a few pixels inward; the one under the pointer turns white and lengthens slightly.
  */
 import * as THREE from 'three';
-import { CARD_W, CARD_H } from './layout.js?v=80ff107';
+import { CARD_W, CARD_H } from './layout.js?v=8059ec6';
 
 const ARM = 11, ARM_FOCUS = 15, GAP = 3, GAP_FROM = 9, FADE_IN = 0.11, FADE_OUT = 0.09;
 const COLOR = { idle: '#efe7c6', idleRgb: [239, 231, 198], focus: '#ffffff' };
@@ -226,7 +226,7 @@ export class Overlay {
     g.strokeStyle = colour; g.lineWidth = 2; trace();
     g.globalAlpha = 1;
   }
-  /** A thin ring around a Heart whose ready Angel would take the next attack. */
+  /** A thin ring around a Heart whose Angel (ready or spent) would take the next attack. */
   halos(g, dt) {
     const want = this.scene.haloIds();
     for (const id of want) if (!this.halo.has(id)) this.halo.set(id, 0);

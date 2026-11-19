@@ -9,9 +9,9 @@
  * Nothing here knows a rule: every move comes from the engine's `legalMoves`, is sent whole to `apply`, and every sentence is read from the state.
  * The log is the same format as a bot batch's observer log, so `replay` rebuilds a game from it and `analyze` (web/sim/analyze.js) reports on it.
  */
-import { newGame, legalMoves, apply, viewFor, locate, isGuarded, isBacked, protector, hasPortal, hasResolve, CARDS, DECK, CHAIN_MAX } from '../../src/index.js?v=80ff107';
-import { LOG_SCHEMA, DEFAULT_LIMITS, POLICIES, prepare, snapshot, keyOf } from './match.js?v=80ff107';
-import { PROFILES } from './bot.js?v=80ff107';
+import { newGame, legalMoves, apply, viewFor, locate, isGuarded, isBacked, protector, hasPortal, hasResolve, CARDS, DECK, CHAIN_MAX } from '../../src/index.js?v=8059ec6';
+import { LOG_SCHEMA, DEFAULT_LIMITS, POLICIES, prepare, snapshot, keyOf } from './match.js?v=8059ec6';
+import { PROFILES } from './bot.js?v=8059ec6';
 
 export const AGENT_VERSION = 'agent/1';
 const bare = (s) => { const { events, ...rest } = s; return rest; };
@@ -35,7 +35,7 @@ function whose(s, id) {
 export function describeMove(s, m) {
   const w = (id) => whose(s, id), me = `p${s.turn}`;
   switch (m.type) {
-    case 'deploy': return m.dest === 'guard' ? `Deploy ${nameOf(m.cardId)} to guard ${w(m.targetId)} (Field action)` : `Deploy ${nameOf(m.cardId)} to your field${keyOf(m.cardId) === 'maniac' ? ' (enters spent)' : ''}${CARDS[keyOf(m.cardId)]?.instant ? ' (free: instant creature)' : ' (Field action)'}`;
+    case 'deploy': return m.dest === 'guard' ? `Deploy ${nameOf(m.cardId)} to guard ${w(m.targetId)} (Field action)` : `Deploy ${nameOf(m.cardId)} to your field${keyOf(m.cardId) === 'maniac' ? ' (enters spent, attacks anyway)' : ''}${CARDS[keyOf(m.cardId)]?.instant ? ' (free: instant creature)' : ' (Field action)'}`;
     case 'attack': return `${m.bonus ? 'Second attack: ' : ''}${nameOf(m.cardId)} attacks ${w(m.targetId)}${m.bonus ? '' : ' (Field action)'}`;
     case 'reguard': return `Move ${nameOf(m.cardId)} to guard ${w(m.targetId)} (free, once a turn; it stays ready)`;
     case 'recover': return hasResolve(s, s.turn) ? `Recover: stand all ${me}'s spent creatures (free: Heaven’s Resolve)` : `Recover: stand ${me}'s spent Knights and Maniacs (Field action)`;
@@ -73,7 +73,7 @@ export function describeState(s, { gameId = null, moves = true } = {}) {
   const used = s.used ? `Field action ${s.used.field ? 'used' : 'free'}, Chain action ${s.used.chain ? 'used' : 'free'}, Guardian move ${s.used.guard ? 'used' : 'free'}` : '';
   out.push(`${gameId ? `${gameId} | ` : ''}turn ${s.turnNumber} | ${s.phase === 'over' ? `GAME OVER, p${s.winner} wins` : `p${s.turn} to play | phase ${s.phase} | ${used}`}`);
   for (const p of s.players) {
-    const h = p.hearts[0], prot = protector(s, p.idx), tags = [h.spent ? 'SPENT (one more blow ends the game)' : 'ready', ...(isGuarded(s, h) ? ['guarded'] : []), ...(prot ? [`a ready Angel would take the blow`] : [])];
+    const h = p.hearts[0], prot = protector(s, p.idx), tags = [h.spent ? 'SPENT (one more blow ends the game)' : 'ready', ...(isGuarded(s, h) ? ['guarded'] : []), ...(prot ? [`an Angel would take the blow`] : [])];
     out.push('', `p${p.idx}${s.phase !== 'over' && p.idx === s.turn ? ' (to play)' : ''}: Heart ${tags.join(', ')} | pile ${p.deck.length}, hand ${p.hand.length}${p.dry ? ' | pile is empty' : ''}${hasPortal(s, p.idx) ? ' | has a Warp Portal' : ''}`);
     out.push(`  field:   ${list(p.field, (c) => inField(s, c))}`);
     out.push(`  chain:   ${Array.from({ length: CHAIN_MAX }, (_, i) => `${SLOT[i]} ${p.chain[i] ? named(p.chain[i]) : '-'}`).join(' | ')}`);
@@ -132,10 +132,10 @@ export function rulesText() {
   return [
     'FIELD + CHAIN, RESTRICTED. Two players, p0 goes first. Defeat the other player\'s Heart: the first successful attack on it turns it spent AND DEFEATS THE ATTACKER (so it has no second attack); a second successful attack, by another creature, defeats the Heart. It takes two creatures to defeat a Heart.',
     `Each player has a Heart and a starting Guardian guarding it, and shuffles a ${Object.values(DECK).reduce((a, b) => a + b, 0)}-card deck; hand 5; draw one at the start of your turn (no reshuffle). No HP, mana or counters.`,
-    'Three rules: HIT a ready card turns it spent; a hit on a spent card defeats it (devices enter spent, so any hit defeats them). SPENT creatures cannot attack or be moved (except that a ready Lantern Keeper lets your spent creatures attack as if ready); Recover stands spent Knights and Maniacs (with a Heaven\'s Resolve, all your creatures), Rally any one creature. GUARD: a guarded card cannot be hit by attacks or spells (a Guardian guards one card; a ready Lantern Keeper guards your other spent cards: creatures, devices, and a Heart after its first blow, never a Guardian; a Warp Portal lets your attacks ignore Guard). A Guardian whose card leaves play goes back to its owner\'s hand.',
+    'Three rules: HIT a ready card turns it spent; a hit on a spent card defeats it (devices enter spent, so any hit defeats them). SPENT: one more hit defeats it; a spent creature cannot attack or be moved, but its effects still work (a spent Guardian still guards, a spent Angel still saves, a spent Lantern Keeper still lights). Exceptions printed on cards: a Maniac attacks even while spent, a Lantern Keeper lets your spent creatures attack as if ready, Shadow Step uses a spent attacker; Recover stands spent Knights and Maniacs (with a Heaven\'s Resolve, all your creatures), Rally any one creature. GUARD: a guarded card cannot be hit by attacks or spells (a Guardian guards one card; a Lantern Keeper, ready or spent, guards your other spent cards: creatures, devices, and a Heart after its first blow, never a Guardian or a Lantern Keeper; a Warp Portal lets your attacks ignore Guard). A Guardian whose card leaves play goes back to its owner\'s hand.',
     'A turn has two allowances, each once, any order: FIELD action (deploy, attack, or Recover; an instant creature, the Lantern Keeper or the Maniac, is deployed without it) and CHAIN action (wind a Fireball/Shift/Behind You/Shadow Step into the next free slot of your Chain, or Release the Chain). Instants (Rally, Witch\'s Kiss) and card effects never use an allowance; instants are played any time on your turn. MOVING A GUARDIAN is free once a turn: one ready Guardian may move onto another of your cards any time on your turn (never between a creature\'s two attacks). The Chain has three slots and resolves top to bottom (slot I, II, III); each spell may be skipped.',
     'THE END OF THE PILES: when your own draw pile is empty, you have no Guardians: the draw that empties it discards yours, and you cannot bring one into play after.',
-    'Only Knights and Maniacs attack. An attack turns the attacker spent. An attack on a Heart with a ready Angel defeats the Angel instead (the attacker survives, spent). "Attacks twice": the second attack comes straight after the first, nothing between. A Maniac attacks twice; a Knight attacks twice if you have another Knight ("paired").',
+    'Only Knights and Maniacs attack. An attack turns the attacker spent. An attack on a Heart with an Angel (ready or spent) defeats the Angel instead (the attacker survives, spent). "Attacks twice": the second attack comes straight after the first, nothing between. A Maniac attacks twice; a Knight attacks twice if you have another Knight ("paired").',
     'Cards:', ...cards,
     'Full rules: docs/RULES.md. The engine decides what is legal: you only ever choose from the numbered list.',
   ].join('\n');
